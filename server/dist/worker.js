@@ -8,7 +8,12 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
         step((generator = generator.apply(thisArg, _arguments || [])).next());
     });
 };
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
+const dotenv_1 = __importDefault(require("dotenv"));
+dotenv_1.default.config();
 const bullmq_1 = require("bullmq");
 const google_genai_1 = require("@langchain/google-genai");
 const qdrant_1 = require("@langchain/qdrant");
@@ -47,11 +52,10 @@ const worker = new bullmq_1.Worker("file-upload-queue", (job) => __awaiter(void 
     });
     const splitDocs = yield textSplitter.splitDocuments(docs);
     console.log(`Split into ${splitDocs.length} chunks`);
-    // console.log(process.env.GOOGLE_API_KEY);
-    console.log("AIzaSyAUYQM-y57OPuiGVkPT-StfNbwh0LeiKR8");
+    console.log(process.env.GOOGLE_API_KEY);
     // Initialize Gemini embeddings
     const embeddings = new google_genai_1.GoogleGenerativeAIEmbeddings({
-        apiKey: "AIzaSyAUYQM-y57OPuiGVkPT-StfNbwh0LeiKR8", // Make sure to set this environment variable
+        apiKey: process.env.GOOGLE_API_KEY, // Make sure to set this environment variable
         modelName: "models/embedding-001", // Gemini embedding model
     });
     // Connect to Qdrant vector store

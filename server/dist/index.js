@@ -12,6 +12,8 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
+const dotenv_1 = __importDefault(require("dotenv"));
+dotenv_1.default.config();
 const express_1 = __importDefault(require("express"));
 const cors_1 = __importDefault(require("cors"));
 const multer_1 = __importDefault(require("multer"));
@@ -19,7 +21,7 @@ const bullmq_1 = require("bullmq");
 const qdrant_1 = require("@langchain/qdrant");
 const google_genai_1 = require("@langchain/google-genai");
 const generative_ai_1 = require("@google/generative-ai");
-const genAI = new generative_ai_1.GoogleGenerativeAI("AIzaSyAUYQM-y57OPuiGVkPT-StfNbwh0LeiKR8");
+const genAI = new generative_ai_1.GoogleGenerativeAI(process.env.GOOGLE_API_KEY);
 const queue = new bullmq_1.Queue("file-upload-queue", {
     connection: { host: "localhost", port: "6379" },
 });
@@ -48,8 +50,9 @@ app.post("/upload/pdf", upload.single("pdf"), (req, res) => {
     }));
     res.json({ message: "uploaded" });
 });
+console.log(process.env.GOOGLE_API_KEY);
 const embeddings = new google_genai_1.GoogleGenerativeAIEmbeddings({
-    apiKey: "AIzaSyAUYQM-y57OPuiGVkPT-StfNbwh0LeiKR8", // Make sure to set this environment variable
+    apiKey: process.env.GOOGLE_API_KEY, // Make sure to set this environment variable
     modelName: "models/embedding-001", // Gemini embedding model
 });
 app.get("/chat", (req, res) => __awaiter(void 0, void 0, void 0, function* () {

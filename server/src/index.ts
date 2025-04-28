@@ -1,3 +1,6 @@
+import dotenv from "dotenv";
+dotenv.config();
+
 import express, { Request, Response } from "express";
 import cors from "cors";
 import multer from "multer";
@@ -7,7 +10,7 @@ import { GoogleGenerativeAIEmbeddings } from "@langchain/google-genai";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import OpenAI from "openai";
 
-const genAI = new GoogleGenerativeAI("AIzaSyAUYQM-y57OPuiGVkPT-StfNbwh0LeiKR8");
+const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY);
 
 const queue = new Queue("file-upload-queue", {
   connection: { host: "localhost", port: "6379" },
@@ -46,8 +49,10 @@ app.post("/upload/pdf", upload.single("pdf"), (req: Request, res: Response) => {
   res.json({ message: "uploaded" });
 });
 
+console.log(process.env.GOOGLE_API_KEY);
+
 const embeddings = new GoogleGenerativeAIEmbeddings({
-  apiKey: "AIzaSyAUYQM-y57OPuiGVkPT-StfNbwh0LeiKR8", // Make sure to set this environment variable
+  apiKey: process.env.GOOGLE_API_KEY, // Make sure to set this environment variable
   modelName: "models/embedding-001", // Gemini embedding model
 });
 
@@ -64,7 +69,6 @@ app.get("/chat", async (req: Request, res: Response) => {
 
   const result = await retriever.invoke(userQuery);
   console.log(result);
-  
 
   // Extract both content and metadata from the results
   const contextWithMetadata = result.map((doc) => ({
@@ -80,7 +84,6 @@ app.get("/chat", async (req: Request, res: Response) => {
   const geminiResponse = await model.generateContent(SYSTEM_PROMPT);
   const responseText = geminiResponse.response.text();
   console.log(responseText);
-  
 
   return res.json({
     message: responseText,

@@ -1,3 +1,6 @@
+import dotenv from "dotenv";
+dotenv.config();
+
 import { Worker } from "bullmq";
 import { GoogleGenerativeAIEmbeddings } from "@langchain/google-genai";
 import { QdrantVectorStore } from "@langchain/qdrant";
@@ -52,12 +55,11 @@ const worker = new Worker(
 
     const splitDocs = await textSplitter.splitDocuments(docs);
     console.log(`Split into ${splitDocs.length} chunks`);
-    // console.log(process.env.GOOGLE_API_KEY);
-    console.log("AIzaSyAUYQM-y57OPuiGVkPT-StfNbwh0LeiKR8");
+    console.log(process.env.GOOGLE_API_KEY);
 
     // Initialize Gemini embeddings
     const embeddings = new GoogleGenerativeAIEmbeddings({
-      apiKey: "AIzaSyAUYQM-y57OPuiGVkPT-StfNbwh0LeiKR8", // Make sure to set this environment variable
+      apiKey: process.env.GOOGLE_API_KEY, // Make sure to set this environment variable
       modelName: "models/embedding-001", // Gemini embedding model
     });
 
