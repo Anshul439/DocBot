@@ -1,0 +1,35 @@
+{
+  "name": "server",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "build": "tsc",
+    "dev": "concurrently \"tsc -w\" \" nodemon dist/index.js\"",
+    "dev:worker": "concurrently \"tsc -w\" \" nodemon dist/worker.js\""
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@google/generative-ai": "^0.24.0",
+    "@langchain/community": "^0.3.41",
+    "@langchain/core": "^0.3.49",
+    "@langchain/google-genai": "^0.2.5",
+    "@langchain/qdrant": "^0.1.2",
+    "bullmq": "^5.51.1",
+    "concurrently": "^9.1.2",
+    "cors": "^2.8.5",
+    "express": "^5.1.0",
+    "multer": "1.4.5-lts.2",
+    "pdf-parse": "^1.1.1",
+    "pdfjs-dist": "^5.2.133"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.17",
+    "@types/express": "^5.0.1",
+    "@types/multer": "^1.4.12",
+    "@types/node": "^22.15.2",
+    "typescript": "^5.8.3"
+  }
+}
