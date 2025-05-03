@@ -1,5 +1,5 @@
-import dotenv from "dotenv";
-dotenv.config();
+import dotenv from 'dotenv'
+dotenv.config()
 
 import { Worker } from "bullmq";
 import { GoogleGenerativeAIEmbeddings } from "@langchain/google-genai";
@@ -25,42 +25,25 @@ const worker = new Worker(
 
     // Load the PDF
     const loader = new PDFLoader(data.path);
-    const rawDocs = await loader.load();
+    const docs = await loader.load();
+    console.log(docs);
 
-    // Add this right after loading the PDF
-    const totalPages = rawDocs.length; // If splitPages=true, this gives total pages
-
-    // The loaded docs will now have metadata including page numbers
-    const docs = rawDocs.map((doc) => {
-      // Extract page number from content (looking for patterns like "23 \nSection")
-      const pageNumberMatch = doc.pageContent.match(/^Version 1\.0 \n(\d+)/);
-      const pageNumber = pageNumberMatch ? parseInt(pageNumberMatch[1]) : null;
-
-      return new Document({
-        pageContent: doc.pageContent,
-        metadata: {
-          ...doc.metadata,
-          pageNumber: pageNumber,
-          totalPages: totalPages,
-          source: doc.metadata.source,
-        },
-      });
-    });
-
-    // When splitting, make sure to preserve metadata
+    // Create text splitter for better processing
     const textSplitter = new CharacterTextSplitter({
       chunkSize: 1000,
       chunkOverlap: 200,
     });
 
+    // Split the documents into chunks
     const splitDocs = await textSplitter.splitDocuments(docs);
     console.log(`Split into ${splitDocs.length} chunks`);
-    console.log(process.env.GOOGLE_API_KEY);
+    // console.log(process.env.GOOGLE_API_KEY);
+  
 
     // Initialize Gemini embeddings
     const embeddings = new GoogleGenerativeAIEmbeddings({
-      apiKey: process.env.GOOGLE_API_KEY, // Make sure to set this environment variable
-      modelName: "models/embedding-001", // Gemini embedding model
+      apiKey: process.env.GOOGLE_API_KEY,
+      modelName: "models/embedding-001",
     });
 
     // Connect to Qdrant vector store

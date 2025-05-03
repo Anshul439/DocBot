@@ -50,35 +50,57 @@ app.post("/upload/pdf", upload.single("pdf"), (req, res) => {
     }));
     res.json({ message: "uploaded" });
 });
-console.log(process.env.GOOGLE_API_KEY);
 const embeddings = new google_genai_1.GoogleGenerativeAIEmbeddings({
     apiKey: process.env.GOOGLE_API_KEY, // Make sure to set this environment variable
     modelName: "models/embedding-001", // Gemini embedding model
 });
 app.get("/chat", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    const userQuery = "What are the submission guidelines?";
-    const vectorStore = yield qdrant_1.QdrantVectorStore.fromExistingCollection(embeddings, {
-        url: "http://localhost:6333",
-        collectionName: "langchainjs-testing",
-    });
-    const retriever = vectorStore.asRetriever({ k: 2 });
-    const result = yield retriever.invoke(userQuery);
-    console.log(result);
-    // Extract both content and metadata from the results
-    const contextWithMetadata = result.map((doc) => ({
-        content: doc.pageContent,
-        metadata: doc.metadata, // This includes page numbers etc.
-    }));
-    const SYSTEM_PROMPT = `You are a helpful AI Assistant who answers the user query based on the available context from PDF file.
-  Context:
-  ${JSON.stringify(contextWithMetadata)}`;
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-pro" });
-    const geminiResponse = yield model.generateContent(SYSTEM_PROMPT);
-    const responseText = geminiResponse.response.text();
-    console.log(responseText);
-    return res.json({
-        message: responseText,
-        docs: contextWithMetadata, // Now includes metadata
-    });
+    try {
+        // Get the query from request parameters instead of hardcoding
+        const userQuery = req.query.message;
+        if (!userQuery) {
+            return res.status(400).json({ error: "Query parameter 'q' is required" });
+        }
+        // Connect to the vector store
+        const vectorStore = yield qdrant_1.QdrantVectorStore.fromExistingCollection(embeddings, {
+            url: "http://localhost:6333",
+            collectionName: "langchainjs-testing",
+        });
+        // Retrieve relevant documents
+        const retriever = vectorStore.asRetriever({
+            k: 3, // Increase to get more context
+        });
+        const results = yield retriever.invoke(userQuery);
+        // Process the retrieved documents to ensure they have proper structure
+        const formattedDocs = results.map(doc => ({
+            content: doc.pageContent || doc.content || "",
+            metadata: doc.metadata || {}
+        }));
+        console.log("Retrieved documents:", JSON.stringify(formattedDocs, null, 2));
+        // Create a better system prompt with proper context formatting
+        const contextText = formattedDocs
+            .map((doc, i) => `Document ${i + 1}:\n${doc.content}\n`)
+            .join("\n");
+        const SYSTEM_PROMPT = `You are a helpful AI Assistant who answers user queries based on the available context from PDF files.
+    
+USER QUERY: ${userQuery}
+
+CONTEXT FROM DOCUMENTS:
+${contextText}
+
+Answer the user's query based only on the information in the above context. If the context doesn't contain relevant information to answer the query, acknowledge that and provide a general response.`;
+        // Generate response using Gemini
+        const model = genAI.getGenerativeModel({ model: "gemini-1.5-pro" });
+        const geminiResponse = yield model.generateContent(SYSTEM_PROMPT);
+        const responseText = geminiResponse.response.text();
+        return res.json({
+            message: responseText,
+            documents: formattedDocs,
+        });
+    }
+    catch (error) {
+        console.error("Error processing chat request:", error);
+        return res.status(500).json({ error: "An error occurred while processing your request" });
+    }
 }));
 app.listen(8000, () => console.log(`Server started on PORT: ${8000}`));

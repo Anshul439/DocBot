@@ -17,7 +17,6 @@ dotenv_1.default.config();
 const bullmq_1 = require("bullmq");
 const google_genai_1 = require("@langchain/google-genai");
 const qdrant_1 = require("@langchain/qdrant");
-const documents_1 = require("@langchain/core/documents");
 const pdf_1 = require("@langchain/community/document_loaders/fs/pdf");
 const textsplitters_1 = require("@langchain/textsplitters");
 const worker = new bullmq_1.Worker("file-upload-queue", (job) => __awaiter(void 0, void 0, void 0, function* () {
@@ -32,31 +31,21 @@ const worker = new bullmq_1.Worker("file-upload-queue", (job) => __awaiter(void 
     */
     // Load the PDF
     const loader = new pdf_1.PDFLoader(data.path);
-    const rawDocs = yield loader.load();
-    // Add this right after loading the PDF
-    const totalPages = rawDocs.length; // If splitPages=true, this gives total pages
-    // The loaded docs will now have metadata including page numbers
-    const docs = rawDocs.map((doc) => {
-        // Extract page number from content (looking for patterns like "23 \nSection")
-        const pageNumberMatch = doc.pageContent.match(/^Version 1\.0 \n(\d+)/);
-        const pageNumber = pageNumberMatch ? parseInt(pageNumberMatch[1]) : null;
-        return new documents_1.Document({
-            pageContent: doc.pageContent,
-            metadata: Object.assign(Object.assign({}, doc.metadata), { pageNumber: pageNumber, totalPages: totalPages, source: doc.metadata.source }),
-        });
-    });
-    // When splitting, make sure to preserve metadata
+    const docs = yield loader.load();
+    console.log(docs);
+    // Create text splitter for better processing
     const textSplitter = new textsplitters_1.CharacterTextSplitter({
         chunkSize: 1000,
         chunkOverlap: 200,
     });
+    // Split the documents into chunks
     const splitDocs = yield textSplitter.splitDocuments(docs);
     console.log(`Split into ${splitDocs.length} chunks`);
-    console.log(process.env.GOOGLE_API_KEY);
+    // console.log(process.env.GOOGLE_API_KEY);
     // Initialize Gemini embeddings
     const embeddings = new google_genai_1.GoogleGenerativeAIEmbeddings({
-        apiKey: process.env.GOOGLE_API_KEY, // Make sure to set this environment variable
-        modelName: "models/embedding-001", // Gemini embedding model
+        apiKey: process.env.GOOGLE_API_KEY,
+        modelName: "models/embedding-001",
     });
     // Connect to Qdrant vector store
     const vectorStore = yield qdrant_1.QdrantVectorStore.fromExistingCollection(embeddings, {
