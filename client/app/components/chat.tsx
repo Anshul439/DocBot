@@ -2,6 +2,8 @@
 
 import { useState, useRef, useEffect } from "react";
 import { SendIcon } from "lucide-react";
+import { useAuth } from "@clerk/nextjs";
+import SignInPrompt from "./prompt";
 
 interface Doc {
   pageContent?: string;
@@ -24,7 +26,9 @@ const ChatComponent = () => {
   const [message, setMessage] = useState<string>("");
   const [messages, setMessages] = useState<IMessage[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
+  const [showAuthPrompt, setShowAuthPrompt] = useState<boolean>(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const { isSignedIn } = useAuth();
 
   // Format timestamp as HH:MM AM/PM
   const formatTime = () => {
@@ -47,6 +51,12 @@ const ChatComponent = () => {
 
   const handleSendMessage = async () => {
     if (!message.trim() || loading) return;
+
+    if (!isSignedIn) {
+      // Show auth prompt with smooth animation
+      setShowAuthPrompt(true);
+      return;
+    }
 
     const userMessage = {
       role: "user",
@@ -106,6 +116,13 @@ const ChatComponent = () => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       handleSendMessage();
+    }
+  };
+
+  const handleInputFocus = () => {
+    if (!isSignedIn) {
+      // Show auth prompt with smooth animation
+      setShowAuthPrompt(true);
     }
   };
 
@@ -173,6 +190,7 @@ const ChatComponent = () => {
             value={message}
             onChange={(e) => setMessage(e.target.value)}
             onKeyDown={handleKeyDown}
+            onFocus={handleInputFocus}
             placeholder="Ask a question about your PDF..."
             className="flex-1 bg-[#0F0F0F] text-white p-3 px-4 focus:outline-none"
           />
@@ -189,6 +207,10 @@ const ChatComponent = () => {
           </button>
         </div>
       </div>
+      
+      {showAuthPrompt && (
+        <SignInPrompt onClose={() => setShowAuthPrompt(false)} />
+      )}
     </div>
   );
 };
