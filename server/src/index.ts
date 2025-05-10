@@ -53,16 +53,20 @@ const embeddings = new GoogleGenerativeAIEmbeddings({
   modelName: "models/embedding-001", // Gemini embedding model
 });
 
+// In your server.ts (backend)
+
 app.get("/chat", async (req: Request, res: Response) => {
   try {
-    // Get the query from request parameters instead of hardcoding
-    const userQuery = req.query.message
+    const userQuery = req.query.message as string;
     
     if (!userQuery) {
-      return res.status(400).json({ error: "Query parameter 'q' is required" });
+      return res.status(400).json({ 
+        error: "Message parameter is required",
+        success: false
+      });
     }
     
-    // Connect to the vector store
+    // Connect to vector store
     const vectorStore = await QdrantVectorStore.fromExistingCollection(
       embeddings,
       {
@@ -71,47 +75,55 @@ app.get("/chat", async (req: Request, res: Response) => {
       }
     );
     
-    // Retrieve relevant documents
-    const retriever = vectorStore.asRetriever({ 
-      k: 3,  // Increase to get more context
-    });
+    // Retrieve relevant documents with scores
+    const results = await vectorStore.similaritySearchWithScore(userQuery, 3);
     
-    const results = await retriever.invoke(userQuery);
-    
-    // Process the retrieved documents to ensure they have proper structure
-    const formattedDocs = results.map(doc => ({
-      content: doc.pageContent || doc.content || "",
-      metadata: doc.metadata || {}
+    // Format documents for response
+    const formattedDocs = results.map(([doc, score]) => ({
+      pageContent: doc.pageContent,
+      metadata: {
+        ...doc.metadata,
+        score, // Include relevance score
+        source: doc.metadata?.source || "unknown",
+        pageNumber: doc.metadata?.loc?.pageNumber || 1
+      }
     }));
     
-    console.log("Retrieved documents:", JSON.stringify(formattedDocs, null, 2));
+    // Create context for the AI
+    const context = formattedDocs
+      .map(doc => `Source: ${doc.metadata.source}\nPage ${doc.metadata.pageNumber}:\n${doc.pageContent}`)
+      .join("\n\n---\n\n");
     
-    // Create a better system prompt with proper context formatting
-    const contextText = formattedDocs
-      .map((doc, i) => `Document ${i+1}:\n${doc.content}\n`)
-      .join("\n");
+    const SYSTEM_PROMPT = `
+You are an AI assistant that answers questions based on provided documents.
+Use the following context to answer the user's question. If you don't know the answer, say so.
+
+CONTEXT:
+${context}
+
+QUESTION: ${userQuery}
+
+ANSWER:`;
     
-    const SYSTEM_PROMPT = `You are a helpful AI Assistant who answers user queries based on the available context from PDF files.
-    
-USER QUERY: ${userQuery}
-
-CONTEXT FROM DOCUMENTS:
-${contextText}
-
-Answer the user's query based only on the information in the above context. If the context doesn't contain relevant information to answer the query, acknowledge that and provide a general response.`;
-
-    // Generate response using Gemini
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-pro" });
+    // Generate response
+    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
     const geminiResponse = await model.generateContent(SYSTEM_PROMPT);
     const responseText = geminiResponse.response.text();
     
     return res.json({
+      success: true,
       message: responseText,
       documents: formattedDocs,
+      query: userQuery
     });
+    
   } catch (error) {
-    console.error("Error processing chat request:", error);
-    return res.status(500).json({ error: "An error occurred while processing your request" });
+    console.error("Error:", error);
+    return res.status(500).json({
+      success: false,
+      error: "Internal server error",
+      message: "Sorry, I encountered an error processing your request."
+    });
   }
 });
 
