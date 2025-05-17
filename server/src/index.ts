@@ -1,3 +1,4 @@
+
 import dotenv from 'dotenv'
 dotenv.config()
 
@@ -8,8 +9,14 @@ import { Queue } from "bullmq";
 import { QdrantVectorStore } from "@langchain/qdrant";
 import { GoogleGenerativeAIEmbeddings } from "@langchain/google-genai";
 import { GoogleGenerativeAI } from "@google/generative-ai";
+import { QdrantClient } from "@qdrant/js-client-rest";
 
 const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY);
+
+// Initialize Qdrant client
+const qdrantClient = new QdrantClient({
+  url: "http://localhost:6333"
+});
 
 const queue = new Queue("file-upload-queue", {
   connection: { host: "localhost", port: "6379" },
@@ -25,39 +32,78 @@ const storage = multer.diskStorage({
   },
 });
 
-//   const upload = multer({ storage: storage })
-
 const upload = multer({ storage: storage });
 
 const app = express();
 app.use(cors());
+app.use(express.json());
 
 app.get("/", (req: Request, res: Response) => {
-  res.json({ status: "fine" });
+  res.json({ status: "ok", message: "PDF Chat API is running" });
 });
 
-app.post("/upload/pdf", upload.single("pdf"), (req: Request, res: Response) => {
-  queue.add(
+// Upload endpoint
+app.post("/upload/pdf", upload.single("pdf"), async (req: Request, res: Response) => {
+  if (!req.file) {
+    return res.status(400).json({ success: false, message: "No file uploaded" });
+  }
+
+  // Add to queue for processing
+  const job = await queue.add(
     "file",
     JSON.stringify({
-      filename: req.file?.originalname,
-      destination: req.file?.destination,
-      path: req.file?.path,
+      filename: req.file.originalname,
+      destination: req.file.destination,
+      path: req.file.path,
     })
   );
-  res.json({ message: "uploaded" });
+  
+  res.json({ 
+    success: true, 
+    message: "PDF uploaded and being processed",
+    jobId: job.id
+  });
 });
 
-const embeddings = new GoogleGenerativeAIEmbeddings({
-  apiKey: process.env.GOOGLE_API_KEY, // Make sure to set this environment variable
-  modelName: "models/embedding-001", // Gemini embedding model
+// Get all available PDFs
+app.get("/pdfs", async (req: Request, res: Response) => {
+  try {
+    // Check if metadata collection exists
+    const collections = await qdrantClient.getCollections();
+    const metadataCollectionExists = collections.collections.some(
+      collection => collection.name === "pdf_metadata"
+    );
+    
+    if (!metadataCollectionExists) {
+      return res.json({ success: true, pdfs: [] });
+    }
+    
+    // Get all PDF metadata
+    const response = await qdrantClient.scroll("pdf_metadata", {
+      limit: 100,
+      with_payload: true
+    });
+    
+    const pdfs = response.points.map(point => point.payload);
+    
+    return res.json({
+      success: true,
+      pdfs
+    });
+  } catch (error) {
+    console.error("Error fetching PDFs:", error);
+    return res.status(500).json({
+      success: false,
+      error: "Failed to fetch PDF list"
+    });
+  }
 });
 
-// In your server.ts (backend)
-
+// Chat endpoint
 app.get("/chat", async (req: Request, res: Response) => {
   try {
     const userQuery = req.query.message as string;
+    const collectionName = req.query.collection as string;
     
     if (!userQuery) {
       return res.status(400).json({ 
@@ -66,26 +112,86 @@ app.get("/chat", async (req: Request, res: Response) => {
       });
     }
     
-    // Connect to vector store
-    const vectorStore = await QdrantVectorStore.fromExistingCollection(
-      embeddings,
-      {
-        url: "http://localhost:6333",
-        collectionName: "langchainjs-testing",
-      }
-    );
+    // If collection is not specified, query the metadata to get all collections
+    let collectionsToSearch: string[] = [];
     
-    // Retrieve relevant documents with scores
-    const results = await vectorStore.similaritySearchWithScore(userQuery, 3);
+    if (collectionName) {
+      // Use the specified collection
+      collectionsToSearch = [collectionName];
+    } else {
+      // If no collection specified, get all PDF collections
+      const collections = await qdrantClient.getCollections();
+      collectionsToSearch = collections.collections
+        .filter(col => col.name.startsWith('pdf_') && col.name !== 'pdf_metadata')
+        .map(col => col.name);
+      
+      if (collectionsToSearch.length === 0) {
+        return res.json({
+          success: false,
+          error: "No PDFs have been uploaded yet",
+          message: "Please upload a PDF before asking questions."
+        });
+      }
+    }
+
+    const apiKey = process.env.GOOGLE_API_KEY as string;
+    
+    const embeddings = new GoogleGenerativeAIEmbeddings({
+      apiKey,
+      modelName: "models/embedding-001",
+    });
+    
+    // Search across all collections and merge results
+    let allResults = [];
+    
+    for (const collection of collectionsToSearch) {
+      try {
+        // Connect to vector store
+        const vectorStore = await QdrantVectorStore.fromExistingCollection(
+          embeddings,
+          {
+            url: "http://localhost:6333",
+            collectionName: collection,
+          }
+        );
+        
+        // Retrieve relevant documents with scores
+        const results = await vectorStore.similaritySearchWithScore(userQuery, 2);
+        
+        // Add collection name to metadata
+        const resultsWithCollectionInfo = results.map(([doc, score]) => {
+          return [
+            { 
+              ...doc, 
+              metadata: { 
+                ...doc.metadata, 
+                collectionName: collection 
+              } 
+            }, 
+            score
+          ];
+        });
+        
+        allResults = [...allResults, ...resultsWithCollectionInfo];
+      } catch (error) {
+        console.error(`Error searching collection ${collection}:`, error);
+        // Continue with other collections if one fails
+      }
+    }
+    
+    // Sort all results by score and take top 3
+    allResults.sort((a, b) => (b[1] as number) - (a[1] as number));
+    const topResults = allResults.slice(0, 3);
     
     // Format documents for response
-    const formattedDocs = results.map(([doc, score]) => ({
+    const formattedDocs = topResults.map(([doc, score]) => ({
       pageContent: doc.pageContent,
       metadata: {
         ...doc.metadata,
         score, // Include relevance score
         source: doc.metadata?.source || "unknown",
-        pageNumber: doc.metadata?.loc?.pageNumber || 1
+        pageNumber: doc.metadata?.loc?.pageNumber || 1,
+        collectionName: doc.metadata?.collectionName
       }
     }));
     
@@ -96,7 +202,7 @@ app.get("/chat", async (req: Request, res: Response) => {
     
     const SYSTEM_PROMPT = `
 You are an AI assistant that answers questions based on provided documents.
-Use the following context to answer the user's question. If you don't know the answer, say so.
+Use the following context to answer the user's question. If you don't know the answer based on the context, say so clearly.
 
 CONTEXT:
 ${context}
@@ -127,4 +233,63 @@ ANSWER:`;
   }
 });
 
-app.listen(8000, () => console.log(`Server started on PORT: ${8000}`));
+// Get job status endpoint
+app.get("/job/:id", async (req: Request, res: Response) => {
+  try {
+    const jobId = req.params.id;
+    const job = await queue.getJob(jobId);
+    
+    if (!job) {
+      return res.status(404).json({
+        success: false,
+        error: "Job not found"
+      });
+    }
+    
+    const state = await job.getState();
+    
+    return res.json({
+      success: true,
+      jobId,
+      state,
+      progress: job.progress
+    });
+    
+  } catch (error) {
+    console.error("Error getting job status:", error);
+    return res.status(500).json({
+      success: false,
+      error: "Failed to get job status"
+    });
+  }
+});
+
+// Delete PDF endpoint
+app.delete("/pdf/:collectionName", async (req: Request, res: Response) => {
+  try {
+    const { collectionName } = req.params;
+    
+    // Delete the collection
+    await qdrantClient.deleteCollection(collectionName);
+    
+    // Remove from metadata
+    await qdrantClient.delete("pdf_metadata", {
+      points: [collectionName]
+    });
+    
+    return res.json({
+      success: true,
+      message: `PDF collection ${collectionName} deleted successfully`
+    });
+    
+  } catch (error) {
+    console.error("Error deleting PDF:", error);
+    return res.status(500).json({
+      success: false,
+      error: "Failed to delete PDF"
+    });
+  }
+});
+
+const PORT = process.env.PORT || 8000;
+app.listen(PORT, () => console.log(`Server started on PORT: ${PORT}`));

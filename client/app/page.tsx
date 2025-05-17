@@ -1,11 +1,27 @@
 'use client'
 
+import { useEffect, useState } from "react";
 import ChatComponent from "./components/chat";
 import FileUploadComponent from "./components/file-upload";
 import { UserButton, SignInButton, SignUpButton, useAuth } from "@clerk/nextjs";
 
 export default function Home() {
   const { isSignedIn } = useAuth();
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  // Listen for the custom event from FileUploadComponent
+  useEffect(() => {
+    const handlePdfUploaded = () => {
+      // Force ChatComponent to refresh by changing the key
+      setRefreshKey(prevKey => prevKey + 1);
+    };
+    
+    window.addEventListener('pdf-uploaded', handlePdfUploaded);
+    
+    return () => {
+      window.removeEventListener('pdf-uploaded', handlePdfUploaded);
+    };
+  }, []);
 
   return (
     <div className="bg-[#000000f7] text-white h-screen flex flex-col">
@@ -43,7 +59,7 @@ export default function Home() {
 
         {/* Chat Section - Right Side */}
         <div className="w-full md:w-[70%] overflow-hidden">
-          <ChatComponent />
+          <ChatComponent key={refreshKey} />
         </div>
       </div>
     </div>
