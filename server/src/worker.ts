@@ -73,6 +73,21 @@ const worker = new Worker(
         console.log(`Created new collection: ${collectionName}`);
       }
 
+      // Connect to Qdrant vector store with new collection
+      const vectorStore = await QdrantVectorStore.fromExistingCollection(
+        embeddings,
+        {
+          url: "http://localhost:6333",
+          collectionName: collectionName,
+        }
+      );
+
+      // Add documents to vector store
+      await vectorStore.addDocuments(splitDocs);
+      console.log(
+        `Successfully added ${splitDocs.length} chunks to collection: ${collectionName}`
+      );
+
       // Store metadata about this PDF in a separate collection for tracking
       const metadataCollectionName = "pdf_metadata";
 
@@ -89,9 +104,13 @@ const worker = new Worker(
             distance: "Dot",
           },
         });
+        console.log(`Created metadata collection: ${metadataCollectionName}`);
       }
 
-      const metadataPointId = Date.now(); // or use a UUID generator
+      // Generate a numeric point ID for Qdrant (requires unsigned int or UUID)
+      const metadataPointId = Math.floor(Date.now() / 1000); // Use epoch seconds as integer ID
+
+      console.log(`Adding metadata with point ID: ${metadataPointId}`);
 
       // Add metadata about this PDF
       await qdrantClient.upsert(metadataCollectionName, {
@@ -100,6 +119,7 @@ const worker = new Worker(
             id: metadataPointId,
             vector: [1.0], // Dummy vector
             payload: {
+              pointId: metadataPointId, // Store ID in payload for reference
               originalFilename: data.filename,
               collectionName: collectionName,
               uploadTime: new Date().toISOString(),
@@ -109,20 +129,7 @@ const worker = new Worker(
         ],
       });
 
-      // Connect to Qdrant vector store with new collection
-      const vectorStore = await QdrantVectorStore.fromExistingCollection(
-        embeddings,
-        {
-          url: "http://localhost:6333",
-          collectionName: collectionName,
-        }
-      );
-
-      // Add documents to vector store
-      await vectorStore.addDocuments(splitDocs);
-      console.log(
-        `Successfully added ${splitDocs.length} chunks to collection: ${collectionName}`
-      );
+      console.log(`Successfully added metadata for ${collectionName}`);
 
       return { collectionName, chunks: splitDocs.length };
     } catch (error) {

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { SendIcon, Trash2Icon } from "lucide-react";
+import { SendIcon } from "lucide-react";
 import { useAuth } from "@clerk/nextjs";
 import SignInPrompt from "./prompt";
 
@@ -24,20 +24,11 @@ interface IMessage {
   timestamp?: string;
 }
 
-interface PDF {
-  originalFilename: string;
-  collectionName: string;
-  uploadTime: string;
-  chunks: number;
-}
-
-const ChatComponent = () => {
+const ChatComponent = ({ selectedPDF }) => {
   const [message, setMessage] = useState<string>("");
   const [messages, setMessages] = useState<IMessage[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
   const [showAuthPrompt, setShowAuthPrompt] = useState<boolean>(false);
-  const [availablePDFs, setAvailablePDFs] = useState<PDF[]>([]);
-  const [selectedPDF, setSelectedPDF] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { isSignedIn } = useAuth();
 
@@ -50,26 +41,6 @@ const ChatComponent = () => {
     hours = hours % 12;
     hours = hours ? hours : 12; // the hour '0' should be '12'
     return `${hours}:${minutes} ${ampm}`;
-  };
-
-  // Fetch available PDFs when component mounts
-  useEffect(() => {
-    if (isSignedIn) {
-      fetchAvailablePDFs();
-    }
-  }, [isSignedIn]);
-
-  const fetchAvailablePDFs = async () => {
-    try {
-      const response = await fetch("http://localhost:8000/pdfs");
-      const data = await response.json();
-      
-      if (data.success && data.pdfs) {
-        setAvailablePDFs(data.pdfs);
-      }
-    } catch (error) {
-      console.error("Error fetching PDFs:", error);
-    }
   };
 
   const scrollToBottom = () => {
@@ -160,76 +131,16 @@ const ChatComponent = () => {
     }
   };
 
-  const handleSelectPDF = (collectionName: string) => {
-    setSelectedPDF(collectionName === selectedPDF ? null : collectionName);
-  };
-
-  const handleDeletePDF = async (collectionName: string, event: React.MouseEvent) => {
-    event.stopPropagation(); // Prevent selecting when deleting
-    
-    if (confirm("Are you sure you want to delete this PDF?")) {
-      try {
-        const response = await fetch(`http://localhost:8000/pdf/${collectionName}`, {
-          method: "DELETE",
-        });
-        
-        const data = await response.json();
-        
-        if (data.success) {
-          // Refresh PDF list
-          fetchAvailablePDFs();
-          
-          // If the deleted PDF was selected, clear selection
-          if (selectedPDF === collectionName) {
-            setSelectedPDF(null);
-          }
-        }
-      } catch (error) {
-        console.error("Error deleting PDF:", error);
-      }
-    }
-  };
-
   return (
     <div className="flex flex-col h-full">
-      {/* PDF selector bar */}
-      {isSignedIn && availablePDFs.length > 0 && (
-        <div className="border-b border-gray-800 p-2 overflow-x-auto whitespace-nowrap">
-          <div className="flex items-center space-x-2">
-            <span className="text-sm text-gray-400 min-w-fit">Select PDF: </span>
-            <button
-              onClick={() => setSelectedPDF(null)}
-              className={`text-sm px-3 py-1 rounded ${
-                selectedPDF === null
-                  ? "bg-indigo-600 text-white"
-                  : "bg-gray-800 text-gray-300 hover:bg-gray-700"
-              }`}
-            >
-              All PDFs
-            </button>
-            {availablePDFs.map((pdf) => (
-              <div key={pdf.collectionName} className="flex items-center">
-                <button
-                  onClick={() => handleSelectPDF(pdf.collectionName)}
-                  className={`text-sm px-3 py-1 rounded flex items-center ${
-                    selectedPDF === pdf.collectionName
-                      ? "bg-indigo-600 text-white"
-                      : "bg-gray-800 text-gray-300 hover:bg-gray-700"
-                  }`}
-                >
-                  {pdf.originalFilename}
-                  <span className="ml-2 text-xs opacity-60">({pdf.chunks} chunks)</span>
-                </button>
-                <button 
-                  onClick={(e) => handleDeletePDF(pdf.collectionName, e)}
-                  className="ml-1 p-1 text-gray-500 hover:text-red-500 rounded hover:bg-gray-800"
-                  title="Delete PDF"
-                >
-                  <Trash2Icon size={14} />
-                </button>
-              </div>
-            ))}
-          </div>
+      {/* Status bar showing which PDF is selected */}
+      {isSignedIn && (
+        <div className="border-b border-gray-800 p-3 text-sm text-gray-400">
+          {selectedPDF ? (
+            <span>Chatting with: <span className="text-indigo-400 font-medium">Selected PDF</span></span>
+          ) : (
+            <span>Chatting with: <span className="text-indigo-400 font-medium">All PDFs</span></span>
+          )}
         </div>
       )}
 

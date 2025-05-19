@@ -25,7 +25,7 @@ const js_client_rest_1 = require("@qdrant/js-client-rest");
 const genAI = new generative_ai_1.GoogleGenerativeAI(process.env.GOOGLE_API_KEY);
 // Initialize Qdrant client
 const qdrantClient = new js_client_rest_1.QdrantClient({
-    url: "http://localhost:6333"
+    url: "http://localhost:6333",
 });
 const queue = new bullmq_1.Queue("file-upload-queue", {
     connection: { host: "localhost", port: "6379" },
@@ -49,7 +49,9 @@ app.get("/", (req, res) => {
 // Upload endpoint
 app.post("/upload/pdf", upload.single("pdf"), (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     if (!req.file) {
-        return res.status(400).json({ success: false, message: "No file uploaded" });
+        return res
+            .status(400)
+            .json({ success: false, message: "No file uploaded" });
     }
     // Add to queue for processing
     const job = yield queue.add("file", JSON.stringify({
@@ -60,7 +62,7 @@ app.post("/upload/pdf", upload.single("pdf"), (req, res) => __awaiter(void 0, vo
     res.json({
         success: true,
         message: "PDF uploaded and being processed",
-        jobId: job.id
+        jobId: job.id,
     });
 }));
 // Get all available PDFs
@@ -68,29 +70,30 @@ app.get("/pdfs", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         // Check if metadata collection exists
         const collections = yield qdrantClient.getCollections();
-        const metadataCollectionExists = collections.collections.some(collection => collection.name === "pdf_metadata");
+        const metadataCollectionExists = collections.collections.some((collection) => collection.name === "pdf_metadata");
         if (!metadataCollectionExists) {
             return res.json({ success: true, pdfs: [] });
         }
         // Get all PDF metadata
         const response = yield qdrantClient.scroll("pdf_metadata", {
             limit: 100,
-            with_payload: true
+            with_payload: true,
         });
-        const pdfs = response.points.map(point => point.payload);
+        const pdfs = response.points.map((point) => point.payload);
         return res.json({
             success: true,
-            pdfs
+            pdfs,
         });
     }
     catch (error) {
         console.error("Error fetching PDFs:", error);
         return res.status(500).json({
             success: false,
-            error: "Failed to fetch PDF list"
+            error: "Failed to fetch PDF list",
         });
     }
 }));
+// Chat endpoint
 // Chat endpoint
 app.get("/chat", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
@@ -99,26 +102,40 @@ app.get("/chat", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
         if (!userQuery) {
             return res.status(400).json({
                 error: "Message parameter is required",
-                success: false
+                success: false,
             });
         }
         // If collection is not specified, query the metadata to get all collections
         let collectionsToSearch = [];
         if (collectionName) {
-            // Use the specified collection
-            collectionsToSearch = [collectionName];
+            // First check if the requested collection exists
+            try {
+                const collectionInfo = yield qdrantClient.getCollection(collectionName);
+                if (collectionInfo) {
+                    collectionsToSearch = [collectionName];
+                    console.log(`Using specified collection: ${collectionName}`);
+                }
+            }
+            catch (err) {
+                console.error(`Collection ${collectionName} not found:`, err);
+                return res.json({
+                    success: false,
+                    error: `The PDF collection "${collectionName}" was not found.`,
+                    message: "This PDF may have been deleted or is not accessible.",
+                });
+            }
         }
         else {
             // If no collection specified, get all PDF collections
             const collections = yield qdrantClient.getCollections();
             collectionsToSearch = collections.collections
-                .filter(col => col.name.startsWith('pdf_') && col.name !== 'pdf_metadata')
-                .map(col => col.name);
+                .filter((col) => col.name.startsWith("pdf_") && col.name !== "pdf_metadata")
+                .map((col) => col.name);
             if (collectionsToSearch.length === 0) {
                 return res.json({
                     success: false,
                     error: "No PDFs have been uploaded yet",
-                    message: "Please upload a PDF before asking questions."
+                    message: "Please upload a PDF before asking questions.",
                 });
             }
         }
@@ -131,6 +148,7 @@ app.get("/chat", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
         let allResults = [];
         for (const collection of collectionsToSearch) {
             try {
+                console.log(`Searching in collection: ${collection}`);
                 // Connect to vector store
                 const vectorStore = yield qdrant_1.QdrantVectorStore.fromExistingCollection(embeddings, {
                     url: "http://localhost:6333",
@@ -138,11 +156,12 @@ app.get("/chat", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
                 });
                 // Retrieve relevant documents with scores
                 const results = yield vectorStore.similaritySearchWithScore(userQuery, 2);
+                console.log(`Found ${results.length} results in ${collection}`);
                 // Add collection name to metadata
                 const resultsWithCollectionInfo = results.map(([doc, score]) => {
                     return [
                         Object.assign(Object.assign({}, doc), { metadata: Object.assign(Object.assign({}, doc.metadata), { collectionName: collection }) }),
-                        score
+                        score,
                     ];
                 });
                 allResults = [...allResults, ...resultsWithCollectionInfo];
@@ -152,6 +171,15 @@ app.get("/chat", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
                 // Continue with other collections if one fails
             }
         }
+        // If no results found
+        if (allResults.length === 0) {
+            return res.json({
+                success: true,
+                message: "I couldn't find information about that in the uploaded PDF(s). Could you please rephrase your question or try a different query?",
+                documents: [],
+                query: userQuery,
+            });
+        }
         // Sort all results by score and take top 3
         allResults.sort((a, b) => b[1] - a[1]);
         const topResults = allResults.slice(0, 3);
@@ -160,12 +188,12 @@ app.get("/chat", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
             var _a, _b, _c, _d;
             return ({
                 pageContent: doc.pageContent,
-                metadata: Object.assign(Object.assign({}, doc.metadata), { score, source: ((_a = doc.metadata) === null || _a === void 0 ? void 0 : _a.source) || "unknown", pageNumber: ((_c = (_b = doc.metadata) === null || _b === void 0 ? void 0 : _b.loc) === null || _c === void 0 ? void 0 : _c.pageNumber) || 1, collectionName: (_d = doc.metadata) === null || _d === void 0 ? void 0 : _d.collectionName })
+                metadata: Object.assign(Object.assign({}, doc.metadata), { score, source: ((_a = doc.metadata) === null || _a === void 0 ? void 0 : _a.source) || "unknown", pageNumber: ((_c = (_b = doc.metadata) === null || _b === void 0 ? void 0 : _b.loc) === null || _c === void 0 ? void 0 : _c.pageNumber) || 1, collectionName: (_d = doc.metadata) === null || _d === void 0 ? void 0 : _d.collectionName }),
             });
         });
         // Create context for the AI
         const context = formattedDocs
-            .map(doc => `Source: ${doc.metadata.source}\nPage ${doc.metadata.pageNumber}:\n${doc.pageContent}`)
+            .map((doc) => `Source: ${doc.metadata.source}\nPage ${doc.metadata.pageNumber}:\n${doc.pageContent}`)
             .join("\n\n---\n\n");
         const SYSTEM_PROMPT = `
 You are an AI assistant that answers questions based on provided documents.
@@ -185,7 +213,7 @@ ANSWER:`;
             success: true,
             message: responseText,
             documents: formattedDocs,
-            query: userQuery
+            query: userQuery,
         });
     }
     catch (error) {
@@ -193,7 +221,7 @@ ANSWER:`;
         return res.status(500).json({
             success: false,
             error: "Internal server error",
-            message: "Sorry, I encountered an error processing your request."
+            message: "Sorry, I encountered an error processing your request.",
         });
     }
 }));
@@ -205,7 +233,7 @@ app.get("/job/:id", (req, res) => __awaiter(void 0, void 0, void 0, function* ()
         if (!job) {
             return res.status(404).json({
                 success: false,
-                error: "Job not found"
+                error: "Job not found",
             });
         }
         const state = yield job.getState();
@@ -213,14 +241,14 @@ app.get("/job/:id", (req, res) => __awaiter(void 0, void 0, void 0, function* ()
             success: true,
             jobId,
             state,
-            progress: job.progress
+            progress: job.progress,
         });
     }
     catch (error) {
         console.error("Error getting job status:", error);
         return res.status(500).json({
             success: false,
-            error: "Failed to get job status"
+            error: "Failed to get job status",
         });
     }
 }));
@@ -228,22 +256,55 @@ app.get("/job/:id", (req, res) => __awaiter(void 0, void 0, void 0, function* ()
 app.delete("/pdf/:collectionName", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const { collectionName } = req.params;
-        // Delete the collection
-        yield qdrantClient.deleteCollection(collectionName);
-        // Remove from metadata
-        yield qdrantClient.delete("pdf_metadata", {
-            points: [collectionName]
+        // Find the metadata entry for this collection
+        const metadataResponse = yield qdrantClient.scroll("pdf_metadata", {
+            filter: {
+                must: [
+                    {
+                        key: "collectionName",
+                        match: {
+                            value: collectionName,
+                        },
+                    },
+                ],
+            },
+            limit: 1,
+            with_payload: true,
+            with_vectors: false,
         });
+        // Try to delete the collection
+        try {
+            yield qdrantClient.deleteCollection(collectionName);
+            console.log(`Collection ${collectionName} deleted successfully`);
+        }
+        catch (collectionError) {
+            console.error(`Error deleting collection ${collectionName}:`, collectionError);
+            // Continue anyway to clean up metadata
+        }
+        // If metadata entry was found, delete it
+        if (metadataResponse.points.length > 0) {
+            const point = metadataResponse.points[0];
+            const pointId = point.id;
+            console.log(`Deleting metadata point with ID: ${pointId} for collection: ${collectionName}`);
+            // Remove from metadata using the correct point ID format
+            yield qdrantClient.delete("pdf_metadata", {
+                points: [pointId], // Use the ID directly from the point
+            });
+            console.log(`Metadata for collection ${collectionName} deleted successfully`);
+        }
+        else {
+            console.log(`No metadata found for collection ${collectionName}`);
+        }
         return res.json({
             success: true,
-            message: `PDF collection ${collectionName} deleted successfully`
+            message: `PDF collection ${collectionName} deleted successfully`,
         });
     }
     catch (error) {
         console.error("Error deleting PDF:", error);
         return res.status(500).json({
             success: false,
-            error: "Failed to delete PDF"
+            error: "Failed to delete PDF",
         });
     }
 }));
