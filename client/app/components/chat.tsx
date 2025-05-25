@@ -32,14 +32,13 @@ const ChatComponent = ({ selectedPDF }) => {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { isSignedIn } = useAuth();
 
-  // Format timestamp as HH:MM AM/PM
   const formatTime = () => {
     const now = new Date();
     let hours = now.getHours();
     const minutes = now.getMinutes().toString().padStart(2, "0");
     const ampm = hours >= 12 ? "PM" : "AM";
     hours = hours % 12;
-    hours = hours ? hours : 12; // the hour '0' should be '12'
+    hours = hours ? hours : 12;
     return `${hours}:${minutes} ${ampm}`;
   };
 
@@ -51,11 +50,23 @@ const ChatComponent = ({ selectedPDF }) => {
     scrollToBottom();
   }, [messages]);
 
+  // Function to format the assistant's response with proper line breaks
+  const formatResponse = (content: string) => {
+    // Split by common delimiters and add line breaks
+    return content
+      .replace(/\n/g, '<br />') // Preserve existing newlines
+      .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>') // Bold markdown
+      .replace(/\*(.*?)\*/g, '<em>$1</em>') // Italic markdown
+      .replace(/- /g, '<br />- ') // List items
+      .replace(/(\d+\. )/g, '<br />$1') // Numbered lists
+      .replace(/• /g, '<br />• ') // Bullet points
+      .replace(/\n\n/g, '<br /><br />'); // Double newlines
+  };
+
   const handleSendMessage = async () => {
     if (!message.trim() || loading) return;
 
     if (!isSignedIn) {
-      // Show auth prompt with smooth animation
       setShowAuthPrompt(true);
       return;
     }
@@ -71,7 +82,6 @@ const ChatComponent = ({ selectedPDF }) => {
     setLoading(true);
 
     try {
-      // Add selected collection to the URL if a PDF is selected
       let url = `http://localhost:8000/chat?message=${encodeURIComponent(message)}`;
       if (selectedPDF) {
         url += `&collection=${encodeURIComponent(selectedPDF)}`;
@@ -126,7 +136,6 @@ const ChatComponent = ({ selectedPDF }) => {
 
   const handleInputFocus = () => {
     if (!isSignedIn) {
-      // Show auth prompt with smooth animation
       setShowAuthPrompt(true);
     }
   };
@@ -160,7 +169,16 @@ const ChatComponent = ({ selectedPDF }) => {
                   : "bg-[#1A1A1A] text-white"
               }`}
             >
-              {msg.content}
+              {msg.role === "assistant" ? (
+                <div 
+                  className="whitespace-pre-wrap"
+                  dangerouslySetInnerHTML={{ 
+                    __html: formatResponse(msg.content || '') 
+                  }} 
+                />
+              ) : (
+                msg.content
+              )}
               {msg.documents && msg.documents.length > 0 && (
                 <div className="mt-2 text-xs text-gray-300">
                   <p className="font-semibold">Sources:</p>

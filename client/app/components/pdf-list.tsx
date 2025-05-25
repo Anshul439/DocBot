@@ -9,27 +9,28 @@ const PDFListComponent = ({ pdfs, selectedPDF, setSelectedPDF, onRefresh }) => {
 
   const handleDeletePDF = async (collectionName, event) => {
     event.stopPropagation(); // Prevent selecting when deleting
-    
-    if (confirm("Are you sure you want to delete this PDF?")) {
-      try {
-        const response = await fetch(`http://localhost:8000/pdf/${collectionName}`, {
+
+    try {
+      const response = await fetch(
+        `http://localhost:8000/pdf/${collectionName}`,
+        {
           method: "DELETE",
-        });
-        
-        const data = await response.json();
-        
-        if (data.success) {
-          // Refresh PDF list
-          onRefresh();
-          
-          // If the deleted PDF was selected, clear selection
-          if (selectedPDF === collectionName) {
-            setSelectedPDF(null);
-          }
         }
-      } catch (error) {
-        console.error("Error deleting PDF:", error);
+      );
+
+      const data = await response.json();
+
+      if (data.success) {
+        // Refresh PDF list
+        onRefresh();
+
+        // If the deleted PDF was selected, clear selection
+        if (selectedPDF === collectionName) {
+          setSelectedPDF(null);
+        }
       }
+    } catch (error) {
+      console.error("Error deleting PDF:", error);
     }
   };
 
@@ -54,9 +55,9 @@ const PDFListComponent = ({ pdfs, selectedPDF, setSelectedPDF, onRefresh }) => {
         >
           <span className="font-medium">All PDFs</span>
         </button>
-        
+
         {pdfs.map((pdf) => (
-          <div 
+          <div
             key={pdf.collectionName}
             className={`rounded-md ${
               selectedPDF === pdf.collectionName
@@ -69,14 +70,16 @@ const PDFListComponent = ({ pdfs, selectedPDF, setSelectedPDF, onRefresh }) => {
               className="w-full text-left text-sm px-4 py-3 flex items-center justify-between"
             >
               <div className="flex-1 overflow-hidden">
-                <div className="font-medium truncate">{pdf.originalFilename}</div>
+                <div className="font-medium truncate">
+                  {pdf.originalFilename}
+                </div>
                 <div className="text-xs opacity-70 mt-1 flex items-center space-x-2">
                   <span>{pdf.chunks} chunks</span>
                   <span>•</span>
                   <span>{new Date(pdf.uploadTime).toLocaleDateString()}</span>
                 </div>
               </div>
-              <button 
+              <button
                 onClick={(e) => handleDeletePDF(pdf.collectionName, e)}
                 className="ml-2 p-1.5 text-inherit opacity-60 hover:opacity-100 rounded hover:bg-black hover:bg-opacity-20"
                 title="Delete PDF"
