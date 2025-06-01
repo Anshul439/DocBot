@@ -154,7 +154,11 @@ const ChatComponent = ({ selectedPDF }) => {
       )}
 
       {/* Messages area */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+<div className="flex-1 overflow-y-auto p-4 space-y-4 
+    [&::-webkit-scrollbar]:w-2 
+    [&::-webkit-scrollbar-thumb]:rounded-full 
+    [&::-webkit-scrollbar-thumb]:bg-gray-700 
+    [&::-webkit-scrollbar-track]:bg-gray-900">
         {messages.map((msg, index) => (
           <div
             key={index}
