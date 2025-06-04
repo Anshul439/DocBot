@@ -2,13 +2,19 @@
 
 import { Trash2Icon } from "lucide-react";
 
-const PDFListComponent = ({ pdfs, selectedPDF, setSelectedPDF, onRefresh }) => {
-  const handleSelectPDF = (collectionName) => {
-    setSelectedPDF(collectionName === selectedPDF ? null : collectionName);
-  };
-
-  const handleDeletePDF = async (collectionName, event) => {
-    event.stopPropagation(); // Prevent selecting when deleting
+const PDFListComponent = ({ 
+  pdfs, 
+  selectedPDF, 
+  setSelectedPDF, 
+  onRefresh 
+}: {
+  pdfs: any[];
+  selectedPDF: string | null;
+  setSelectedPDF: (collectionName: string | null) => void;
+  onRefresh: () => void;
+}) => {
+  const handleDeletePDF = async (collectionName: string, event: React.MouseEvent) => {
+    event.stopPropagation();
 
     try {
       const response = await fetch(
@@ -21,10 +27,7 @@ const PDFListComponent = ({ pdfs, selectedPDF, setSelectedPDF, onRefresh }) => {
       const data = await response.json();
 
       if (data.success) {
-        // Refresh PDF list
         onRefresh();
-
-        // If the deleted PDF was selected, clear selection
         if (selectedPDF === collectionName) {
           setSelectedPDF(null);
         }
@@ -45,10 +48,10 @@ const PDFListComponent = ({ pdfs, selectedPDF, setSelectedPDF, onRefresh }) => {
   return (
     <div
       className="flex-1 overflow-y-auto 
-    [&::-webkit-scrollbar]:w-2 
-    [&::-webkit-scrollbar-thumb]:rounded-full 
-    [&::-webkit-scrollbar-thumb]:bg-gray-700 
-    [&::-webkit-scrollbar-track]:bg-gray-900"
+      [&::-webkit-scrollbar]:w-2 
+      [&::-webkit-scrollbar-thumb]:rounded-full 
+      [&::-webkit-scrollbar-thumb]:bg-gray-700 
+      [&::-webkit-scrollbar-track]:bg-gray-900"
     >
       <div className="space-y-2">
         <button
@@ -72,7 +75,7 @@ const PDFListComponent = ({ pdfs, selectedPDF, setSelectedPDF, onRefresh }) => {
             }`}
           >
             <button
-              onClick={() => handleSelectPDF(pdf.collectionName)}
+              onClick={() => setSelectedPDF(pdf.collectionName)}
               className="w-full text-left text-sm px-4 py-3 flex items-center justify-between"
             >
               <div className="flex-1 overflow-hidden">

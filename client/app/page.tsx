@@ -3,21 +3,29 @@
 import { useEffect, useState } from "react";
 import ChatComponent from "./components/chat";
 import FileUploadComponent from "./components/file-upload";
-import PDFListComponent from "./components/pdf-list"; // We'll create this new component
+import PDFListComponent from "./components/pdf-list";
 import { UserButton, SignInButton, SignUpButton, useAuth } from "@clerk/nextjs";
+
+interface IMessage {
+  role: "assistant" | "user";
+  content?: string;
+  documents?: any[];
+  timestamp?: string;
+}
 
 export default function Home() {
   const { isSignedIn } = useAuth();
   const [refreshKey, setRefreshKey] = useState(0);
   const [availablePDFs, setAvailablePDFs] = useState([]);
-  const [selectedPDF, setSelectedPDF] = useState(null);
+  const [selectedPDF, setSelectedPDF] = useState<string | null>(null);
+  const [chatHistories, setChatHistories] = useState<Record<string, IMessage[]>>({
+    'all': []
+  });
 
   // Listen for the custom event from FileUploadComponent
   useEffect(() => {
     const handlePdfUploaded = () => {
-      // Force components to refresh by changing the key
       setRefreshKey(prevKey => prevKey + 1);
-      // Fetch PDFs after upload
       fetchAvailablePDFs();
     };
     
@@ -42,10 +50,39 @@ export default function Home() {
       
       if (data.success && data.pdfs) {
         setAvailablePDFs(data.pdfs);
+        
+        // Initialize chat histories for new PDFs
+        const newChatHistories = { ...chatHistories };
+        data.pdfs.forEach((pdf: any) => {
+          if (!newChatHistories[pdf.collectionName]) {
+            newChatHistories[pdf.collectionName] = [];
+          }
+        });
+        setChatHistories(newChatHistories);
       }
     } catch (error) {
       console.error("Error fetching PDFs:", error);
     }
+  };
+
+  const handleSelectPDF = (collectionName: string | null) => {
+    setSelectedPDF(collectionName);
+    
+    // Initialize chat history if it doesn't exist
+    if (collectionName && !chatHistories[collectionName]) {
+      setChatHistories(prev => ({
+        ...prev,
+        [collectionName]: []
+      }));
+    }
+  };
+
+  const updateChatHistory = (collectionName: string | null, messages: IMessage[]) => {
+    const key = collectionName || 'all';
+    setChatHistories(prev => ({
+      ...prev,
+      [key]: messages
+    }));
   };
 
   return (
@@ -88,7 +125,7 @@ export default function Home() {
             <PDFListComponent 
               pdfs={availablePDFs}
               selectedPDF={selectedPDF}
-              setSelectedPDF={setSelectedPDF}
+              setSelectedPDF={handleSelectPDF}
               onRefresh={fetchAvailablePDFs}
               key={`list-${refreshKey}`}
             />
@@ -98,8 +135,10 @@ export default function Home() {
         {/* Chat Section - Right Side */}
         <div className="w-full md:w-[70%] overflow-hidden">
           <ChatComponent 
-            key={`chat-${refreshKey}`} 
+            key={`chat-${selectedPDF || 'all'}`}
             selectedPDF={selectedPDF} 
+            chatHistory={selectedPDF ? chatHistories[selectedPDF] || [] : chatHistories['all']}
+            updateChatHistory={updateChatHistory}
           />
         </div>
       </div>

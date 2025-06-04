@@ -24,9 +24,27 @@ interface IMessage {
   timestamp?: string;
 }
 
-const ChatComponent = ({ selectedPDF }) => {
+interface ChatComponentProps {
+  selectedPDF: string | null;
+  chatHistory: IMessage[];
+  updateChatHistory: (
+    collectionName: string | null,
+    messages: IMessage[]
+  ) => void;
+  availablePDFs: Array<{
+    collectionName: string;
+    originalFilename: string;
+    // add other properties if they exist
+  }>;
+}
+
+const ChatComponent = ({
+  selectedPDF,
+  chatHistory,
+  updateChatHistory,
+  availablePDFs,
+}: ChatComponentProps) => {
   const [message, setMessage] = useState<string>("");
-  const [messages, setMessages] = useState<IMessage[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
   const [showAuthPrompt, setShowAuthPrompt] = useState<boolean>(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -48,19 +66,17 @@ const ChatComponent = ({ selectedPDF }) => {
 
   useEffect(() => {
     scrollToBottom();
-  }, [messages]);
+  }, [chatHistory]);
 
-  // Function to format the assistant's response with proper line breaks
   const formatResponse = (content: string) => {
-    // Split by common delimiters and add line breaks
     return content
-      .replace(/\n/g, '<br />') // Preserve existing newlines
-      .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>') // Bold markdown
-      .replace(/\*(.*?)\*/g, '<em>$1</em>') // Italic markdown
-      .replace(/- /g, '<br />- ') // List items
-      .replace(/(\d+\. )/g, '<br />$1') // Numbered lists
-      .replace(/• /g, '<br />• ') // Bullet points
-      .replace(/\n\n/g, '<br /><br />'); // Double newlines
+      .replace(/\n/g, "<br />")
+      .replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>")
+      .replace(/\*(.*?)\*/g, "<em>$1</em>")
+      .replace(/- /g, "<br />- ")
+      .replace(/(\d+\. )/g, "<br />$1")
+      .replace(/• /g, "<br />• ")
+      .replace(/\n\n/g, "<br /><br />");
   };
 
   const handleSendMessage = async () => {
@@ -77,12 +93,15 @@ const ChatComponent = ({ selectedPDF }) => {
       timestamp: formatTime(),
     };
 
-    setMessages((prev) => [...prev, userMessage]);
+    const updatedHistory = [...chatHistory, userMessage];
+    updateChatHistory(selectedPDF, updatedHistory);
     setMessage("");
     setLoading(true);
 
     try {
-      let url = `http://localhost:8000/chat?message=${encodeURIComponent(message)}`;
+      let url = `http://localhost:8000/chat?message=${encodeURIComponent(
+        message
+      )}`;
       if (selectedPDF) {
         url += `&collection=${encodeURIComponent(selectedPDF)}`;
       }
@@ -100,28 +119,25 @@ const ChatComponent = ({ selectedPDF }) => {
         throw new Error(data.error || "Failed to get response");
       }
 
-      setMessages((prev) => [
-        ...prev,
-        {
-          role: "assistant",
-          content: data.message,
-          documents: data.documents,
-          timestamp: formatTime(),
-        },
-      ]);
+      const assistantMessage = {
+        role: "assistant",
+        content: data.message,
+        documents: data.documents,
+        timestamp: formatTime(),
+      };
+
+      updateChatHistory(selectedPDF, [...updatedHistory, assistantMessage]);
     } catch (error) {
       console.error("Error:", error);
-      setMessages((prev) => [
-        ...prev,
-        {
-          role: "assistant",
-          content:
-            error instanceof Error
-              ? error.message
-              : "An unexpected error occurred",
-          timestamp: formatTime(),
-        },
-      ]);
+      const errorMessage = {
+        role: "assistant",
+        content:
+          error instanceof Error
+            ? error.message
+            : "An unexpected error occurred",
+        timestamp: formatTime(),
+      };
+      updateChatHistory(selectedPDF, [...updatedHistory, errorMessage]);
     } finally {
       setLoading(false);
     }
@@ -146,20 +162,30 @@ const ChatComponent = ({ selectedPDF }) => {
       {isSignedIn && (
         <div className="border-b border-gray-800 p-3 text-sm text-gray-400">
           {selectedPDF ? (
-            <span>Chatting with: <span className="text-indigo-400 font-medium">Selected PDF</span></span>
+            <span>
+              Chatting with:{" "}
+              <span className="text-indigo-400 font-medium">
+                {availablePDFs?.find(pdf => pdf.collectionName === selectedPDF)?.originalFilename || 'Selected PDF'}
+              </span>
+            </span>
           ) : (
-            <span>Chatting with: <span className="text-indigo-400 font-medium">All PDFs</span></span>
+            <span>
+              Chatting with:{" "}
+              <span className="text-indigo-400 font-medium">All PDFs</span>
+            </span>
           )}
         </div>
       )}
 
       {/* Messages area */}
-<div className="flex-1 overflow-y-auto p-4 space-y-4 
-    [&::-webkit-scrollbar]:w-2 
-    [&::-webkit-scrollbar-thumb]:rounded-full 
-    [&::-webkit-scrollbar-thumb]:bg-gray-700 
-    [&::-webkit-scrollbar-track]:bg-gray-900">
-        {messages.map((msg, index) => (
+      <div
+        className="flex-1 overflow-y-auto p-4 space-y-4 
+          [&::-webkit-scrollbar]:w-2 
+          [&::-webkit-scrollbar-thumb]:rounded-full 
+          [&::-webkit-scrollbar-thumb]:bg-gray-700 
+          [&::-webkit-scrollbar-track]:bg-gray-900"
+      >
+        {chatHistory.map((msg, index) => (
           <div
             key={index}
             className={`flex flex-col ${
@@ -174,11 +200,11 @@ const ChatComponent = ({ selectedPDF }) => {
               }`}
             >
               {msg.role === "assistant" ? (
-                <div 
+                <div
                   className="whitespace-pre-wrap"
-                  dangerouslySetInnerHTML={{ 
-                    __html: formatResponse(msg.content || '') 
-                  }} 
+                  dangerouslySetInnerHTML={{
+                    __html: formatResponse(msg.content || ""),
+                  }}
                 />
               ) : (
                 msg.content
@@ -234,7 +260,11 @@ const ChatComponent = ({ selectedPDF }) => {
             onChange={(e) => setMessage(e.target.value)}
             onKeyDown={handleKeyDown}
             onFocus={handleInputFocus}
-            placeholder={selectedPDF ? "Ask a question about this PDF..." : "Ask a question about your PDFs..."}
+            placeholder={
+              selectedPDF
+                ? "Ask a question about this PDF..."
+                : "Ask a question about your PDFs..."
+            }
             className="flex-1 bg-[#0F0F0F] text-white p-3 px-4 focus:outline-none"
           />
           <button
@@ -250,7 +280,7 @@ const ChatComponent = ({ selectedPDF }) => {
           </button>
         </div>
       </div>
-      
+
       {showAuthPrompt && (
         <SignInPrompt onClose={() => setShowAuthPrompt(false)} />
       )}

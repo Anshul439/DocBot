@@ -17,11 +17,13 @@
     "@langchain/core": "^0.3.49",
     "@langchain/google-genai": "^0.2.5",
     "@langchain/qdrant": "^0.1.2",
+    "@types/mongoose": "^5.11.97",
     "bullmq": "^5.51.1",
     "concurrently": "^9.1.2",
     "cors": "^2.8.5",
     "dotenv": "^16.5.0",
     "express": "^5.1.0",
+    "mongoose": "^8.15.1",
     "multer": "1.4.5-lts.2",
     "pdf-parse": "^1.1.1",
     "pdfjs-dist": "^5.2.133"
