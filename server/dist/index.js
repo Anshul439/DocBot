@@ -25,13 +25,29 @@ const generative_ai_1 = require("@google/generative-ai");
 const js_client_rest_1 = require("@qdrant/js-client-rest");
 const pdf_1 = require("@langchain/community/document_loaders/fs/pdf");
 const textsplitters_1 = require("@langchain/textsplitters");
+const redis_1 = require("redis");
 const genAI = new generative_ai_1.GoogleGenerativeAI(process.env.GOOGLE_API_KEY);
 // Initialize Qdrant client
 const qdrantClient = new js_client_rest_1.QdrantClient({
-    url: "http://localhost:6333",
+    url: "https://3d196b01-67bd-48ce-be38-93174a6c7beb.us-west-1-0.aws.cloud.qdrant.io:6333",
+    apiKey: "1-epIrmYd_dp5OtFkttML7XYHCc4-uJgVgvrNaPZLNnvLCg7f22hVA",
 });
+const redisConnection = (0, redis_1.createClient)({
+    username: "default",
+    password: "t2sldAXuL6SgLCEm7lQcrlzdtnONlCsY",
+    socket: {
+        host: "redis-10979.c84.us-east-1-2.ec2.redns.redis-cloud.com",
+        port: 10979,
+    },
+});
+console.log(process.env.REDIS_URL);
 const queue = new bullmq_1.Queue("file-upload-queue", {
-    connection: { host: "localhost", port: "6379" },
+    connection: {
+        username: "default",
+        password: "t2sldAXuL6SgLCEm7lQcrlzdtnONlCsY",
+        host: "redis-10979.c84.us-east-1-2.ec2.redns.redis-cloud.com",
+        port: 10979,
+    },
 });
 // Initialize the worker within the same process
 const worker = new bullmq_1.Worker("file-upload-queue", (job) => __awaiter(void 0, void 0, void 0, function* () {
@@ -80,7 +96,8 @@ const worker = new bullmq_1.Worker("file-upload-queue", (job) => __awaiter(void 
         }
         // Connect to Qdrant vector store with new collection
         const vectorStore = yield qdrant_1.QdrantVectorStore.fromExistingCollection(embeddings, {
-            url: "http://localhost:6333",
+            url: "https://3d196b01-67bd-48ce-be38-93174a6c7beb.us-west-1-0.aws.cloud.qdrant.io:6333",
+            apiKey: "1-epIrmYd_dp5OtFkttML7XYHCc4-uJgVgvrNaPZLNnvLCg7f22hVA",
             collectionName: collectionName,
         });
         // Add documents to vector store
@@ -129,8 +146,10 @@ const worker = new bullmq_1.Worker("file-upload-queue", (job) => __awaiter(void 
 }), {
     concurrency: 5, // Limit concurrency to avoid overwhelming resources
     connection: {
-        host: "localhost",
-        port: "6379",
+        username: "default",
+        password: "t2sldAXuL6SgLCEm7lQcrlzdtnONlCsY",
+        host: "redis-10979.c84.us-east-1-2.ec2.redns.redis-cloud.com",
+        port: 10979,
     },
 });
 // Worker event handlers
@@ -209,13 +228,25 @@ app.get("/pdfs", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
 // Helper function to detect summary requests
 function isSummaryRequest(query) {
     const summaryKeywords = [
-        'summarize', 'summary', 'overview', 'brief', 'outline', 'recap',
-        'main points', 'key points', 'highlights', 'conclusion', 'conclusions',
-        'what are the main', 'give me an overview', 'tell me about all',
-        'what do these pdfs contain', 'content of all pdfs'
+        "summarize",
+        "summary",
+        "overview",
+        "brief",
+        "outline",
+        "recap",
+        "main points",
+        "key points",
+        "highlights",
+        "conclusion",
+        "conclusions",
+        "what are the main",
+        "give me an overview",
+        "tell me about all",
+        "what do these pdfs contain",
+        "content of all pdfs",
     ];
     const lowercaseQuery = query.toLowerCase();
-    return summaryKeywords.some(keyword => lowercaseQuery.includes(keyword));
+    return summaryKeywords.some((keyword) => lowercaseQuery.includes(keyword));
 }
 // Fixed helper function to get comprehensive content for summaries
 function getComprehensiveContent(collectionsToSearch, embeddings) {
@@ -312,7 +343,8 @@ function getComprehensiveContent(collectionsToSearch, embeddings) {
                     try {
                         console.log(`Trying vector store approach for ${collection}`);
                         const vectorStore = yield qdrant_1.QdrantVectorStore.fromExistingCollection(embeddings, {
-                            url: "http://localhost:6333",
+                            url: "https://3d196b01-67bd-48ce-be38-93174a6c7beb.us-west-1-0.aws.cloud.qdrant.io:6333",
+                            apiKey: "1-epIrmYd_dp5OtFkttML7XYHCc4-uJgVgvrNaPZLNnvLCg7f22hVA",
                             collectionName: collection,
                         });
                         // Use a generic query to get some content
@@ -484,7 +516,8 @@ Please provide a comprehensive summary:`;
                 console.log(`Searching in collection: ${collection}`);
                 // Create vector store for this collection
                 const vectorStore = yield qdrant_1.QdrantVectorStore.fromExistingCollection(embeddings, {
-                    url: "http://localhost:6333",
+                    url: "https://3d196b01-67bd-48ce-be38-93174a6c7beb.us-west-1-0.aws.cloud.qdrant.io:6333",
+                    apiKey: "1-epIrmYd_dp5OtFkttML7XYHCc4-uJgVgvrNaPZLNnvLCg7f22hVA",
                     collectionName: collection,
                 });
                 // Perform similarity search

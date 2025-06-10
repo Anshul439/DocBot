@@ -12,16 +12,34 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 import { QdrantClient } from "@qdrant/js-client-rest";
 import { PDFLoader } from "@langchain/community/document_loaders/fs/pdf";
 import { CharacterTextSplitter } from "@langchain/textsplitters";
+import { createClient } from "redis";
 
 const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY);
 
 // Initialize Qdrant client
 const qdrantClient = new QdrantClient({
-  url: "http://localhost:6333",
+  url: "https://3d196b01-67bd-48ce-be38-93174a6c7beb.us-west-1-0.aws.cloud.qdrant.io:6333",
+  apiKey: "1-epIrmYd_dp5OtFkttML7XYHCc4-uJgVgvrNaPZLNnvLCg7f22hVA",
 });
 
+const redisConnection = createClient({
+  username: "default",
+  password: "t2sldAXuL6SgLCEm7lQcrlzdtnONlCsY",
+  socket: {
+    host: "redis-10979.c84.us-east-1-2.ec2.redns.redis-cloud.com",
+    port: 10979,
+  },
+});
+
+console.log(process.env.REDIS_URL);
+
 const queue = new Queue("file-upload-queue", {
-  connection: { host: "localhost", port: "6379" },
+connection: {
+    username: "default",
+    password: "t2sldAXuL6SgLCEm7lQcrlzdtnONlCsY",
+    host: "redis-10979.c84.us-east-1-2.ec2.redns.redis-cloud.com",
+    port: 10979,
+  },
 });
 
 // Initialize the worker within the same process
@@ -88,7 +106,8 @@ const worker = new Worker(
       const vectorStore = await QdrantVectorStore.fromExistingCollection(
         embeddings,
         {
-          url: "http://localhost:6333",
+           url: "https://3d196b01-67bd-48ce-be38-93174a6c7beb.us-west-1-0.aws.cloud.qdrant.io:6333",
+          apiKey: "1-epIrmYd_dp5OtFkttML7XYHCc4-uJgVgvrNaPZLNnvLCg7f22hVA",
           collectionName: collectionName,
         }
       );
@@ -151,8 +170,10 @@ const worker = new Worker(
   {
     concurrency: 5, // Limit concurrency to avoid overwhelming resources
     connection: {
-      host: "localhost",
-      port: "6379",
+       username: "default",
+      password: "t2sldAXuL6SgLCEm7lQcrlzdtnONlCsY",
+      host: "redis-10979.c84.us-east-1-2.ec2.redns.redis-cloud.com",
+      port: 10979,
     },
   }
 );
@@ -256,14 +277,26 @@ app.get("/pdfs", async (req: Request, res: Response) => {
 // Helper function to detect summary requests
 function isSummaryRequest(query: string): boolean {
   const summaryKeywords = [
-    'summarize', 'summary', 'overview', 'brief', 'outline', 'recap', 
-    'main points', 'key points', 'highlights', 'conclusion', 'conclusions',
-    'what are the main', 'give me an overview', 'tell me about all',
-    'what do these pdfs contain', 'content of all pdfs'
+    "summarize",
+    "summary",
+    "overview",
+    "brief",
+    "outline",
+    "recap",
+    "main points",
+    "key points",
+    "highlights",
+    "conclusion",
+    "conclusions",
+    "what are the main",
+    "give me an overview",
+    "tell me about all",
+    "what do these pdfs contain",
+    "content of all pdfs",
   ];
   
   const lowercaseQuery = query.toLowerCase();
-  return summaryKeywords.some(keyword => lowercaseQuery.includes(keyword));
+  return summaryKeywords.some((keyword) => lowercaseQuery.includes(keyword));
 }
 
 // Fixed helper function to get comprehensive content for summaries
@@ -369,7 +402,8 @@ async function getComprehensiveContent(collectionsToSearch, embeddings) {
           const vectorStore = await QdrantVectorStore.fromExistingCollection(
             embeddings,
             {
-              url: "http://localhost:6333",
+            url: "https://3d196b01-67bd-48ce-be38-93174a6c7beb.us-west-1-0.aws.cloud.qdrant.io:6333",
+              apiKey: "1-epIrmYd_dp5OtFkttML7XYHCc4-uJgVgvrNaPZLNnvLCg7f22hVA",
               collectionName: collection,
             }
           );
@@ -570,7 +604,8 @@ Please provide a comprehensive summary:`;
         const vectorStore = await QdrantVectorStore.fromExistingCollection(
           embeddings,
           {
-            url: "http://localhost:6333",
+           url: "https://3d196b01-67bd-48ce-be38-93174a6c7beb.us-west-1-0.aws.cloud.qdrant.io:6333",
+            apiKey: "1-epIrmYd_dp5OtFkttML7XYHCc4-uJgVgvrNaPZLNnvLCg7f22hVA",
             collectionName: collection,
           }
         );
