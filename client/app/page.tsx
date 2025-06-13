@@ -1,9 +1,9 @@
-'use client'
+"use client";
 
 import { useEffect, useState } from "react";
-import ChatComponent from "./components/chat";
-import FileUploadComponent from "./components/file-upload";
-import PDFListComponent from "./components/pdf-list";
+import ChatComponent from "../components/chat";
+import FileUploadComponent from "../components/file-upload";
+import PDFListComponent from "../components/pdf-list";
 import { UserButton, SignInButton, SignUpButton, useAuth } from "@clerk/nextjs";
 
 interface IMessage {
@@ -15,50 +15,44 @@ interface IMessage {
 
 export default function Home() {
   const { isSignedIn } = useAuth();
-  const [refreshKey, setRefreshKey] = useState(0);
   const [availablePDFs, setAvailablePDFs] = useState([]);
   const [selectedPDF, setSelectedPDF] = useState<string | null>(null);
-  const [chatHistories, setChatHistories] = useState<Record<string, IMessage[]>>({
-    'all': []
+  const [chatHistories, setChatHistories] = useState<
+    Record<string, IMessage[]>
+  >({
+    all: [],
   });
 
-  // Listen for the custom event from FileUploadComponent
-  useEffect(() => {
-    const handlePdfUploaded = () => {
-      setRefreshKey(prevKey => prevKey + 1);
-      fetchAvailablePDFs();
-    };
-    
-    window.addEventListener('pdf-uploaded', handlePdfUploaded);
-    
-    return () => {
-      window.removeEventListener('pdf-uploaded', handlePdfUploaded);
-    };
-  }, []);
 
-  // Fetch available PDFs when component mounts or user signs in
+  // Listen for PDF upload events
   useEffect(() => {
-    if (isSignedIn) {
+    fetchAvailablePDFs();
+    const handlePdfUploaded = () => {
       fetchAvailablePDFs();
-    }
-  }, [isSignedIn, refreshKey]);
+    };
+
+    window.addEventListener("pdf-uploaded", handlePdfUploaded);
+    return () => window.removeEventListener("pdf-uploaded", handlePdfUploaded);
+  }, []);
 
   const fetchAvailablePDFs = async () => {
     try {
       const response = await fetch("http://localhost:8000/pdfs");
       const data = await response.json();
-      
+
       if (data.success && data.pdfs) {
         setAvailablePDFs(data.pdfs);
-        
-        // Initialize chat histories for new PDFs
-        const newChatHistories = { ...chatHistories };
-        data.pdfs.forEach((pdf: any) => {
-          if (!newChatHistories[pdf.collectionName]) {
-            newChatHistories[pdf.collectionName] = [];
-          }
+
+        // Only initialize new PDF chat histories without overwriting existing ones
+        setChatHistories((prev) => {
+          const newHistories = { ...prev };
+          data.pdfs.forEach((pdf: any) => {
+            if (!newHistories[pdf.collectionName]) {
+              newHistories[pdf.collectionName] = [];
+            }
+          });
+          return newHistories;
         });
-        setChatHistories(newChatHistories);
       }
     } catch (error) {
       console.error("Error fetching PDFs:", error);
@@ -67,21 +61,16 @@ export default function Home() {
 
   const handleSelectPDF = (collectionName: string | null) => {
     setSelectedPDF(collectionName);
-    
-    // Initialize chat history if it doesn't exist
-    if (collectionName && !chatHistories[collectionName]) {
-      setChatHistories(prev => ({
-        ...prev,
-        [collectionName]: []
-      }));
-    }
   };
 
-  const updateChatHistory = (collectionName: string | null, messages: IMessage[]) => {
-    const key = collectionName || 'all';
-    setChatHistories(prev => ({
+  const updateChatHistory = (
+    collectionName: string | null,
+    messages: IMessage[]
+  ) => {
+    const key = collectionName || "all";
+    setChatHistories((prev) => ({
       ...prev,
-      [key]: messages
+      [key]: messages,
     }));
   };
 
@@ -111,34 +100,35 @@ export default function Home() {
       </div>
 
       <div className="flex flex-1 flex-col md:flex-row overflow-hidden">
-        {/* Left Side Panel - Upload PDF & PDF List */}
+        {/* Left Side Panel */}
         <div className="w-full md:w-[30%] border-r border-gray-800 flex flex-col overflow-hidden">
-          {/* Upload Section - Top Half */}
           <div className="p-4 h-1/2 flex flex-col overflow-hidden">
             <h2 className="text-xl mb-4">Upload PDF</h2>
-            <FileUploadComponent key={`upload-${refreshKey}`} />
+            <FileUploadComponent />
           </div>
-          
-          {/* PDF List Section - Bottom Half */}
+
           <div className="border-t border-gray-800 p-4 h-1/2 flex flex-col overflow-hidden">
             <h2 className="text-xl mb-4">Your PDFs</h2>
-            <PDFListComponent 
+            <PDFListComponent
               pdfs={availablePDFs}
               selectedPDF={selectedPDF}
               setSelectedPDF={handleSelectPDF}
               onRefresh={fetchAvailablePDFs}
-              key={`list-${refreshKey}`}
             />
           </div>
         </div>
 
-        {/* Chat Section - Right Side */}
+        {/* Chat Section */}
         <div className="w-full md:w-[70%] overflow-hidden">
-          <ChatComponent 
-            key={`chat-${selectedPDF || 'all'}`}
-            selectedPDF={selectedPDF} 
-            chatHistory={selectedPDF ? chatHistories[selectedPDF] || [] : chatHistories['all']}
+          <ChatComponent
+            selectedPDF={selectedPDF}
+            chatHistory={
+              selectedPDF
+                ? chatHistories[selectedPDF] || []
+                : chatHistories["all"]
+            }
             updateChatHistory={updateChatHistory}
+            availablePDFs={availablePDFs}
           />
         </div>
       </div>

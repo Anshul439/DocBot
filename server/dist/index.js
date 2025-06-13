@@ -25,29 +25,59 @@ const generative_ai_1 = require("@google/generative-ai");
 const js_client_rest_1 = require("@qdrant/js-client-rest");
 const pdf_1 = require("@langchain/community/document_loaders/fs/pdf");
 const textsplitters_1 = require("@langchain/textsplitters");
-const redis_1 = require("redis");
+const fs_1 = __importDefault(require("fs"));
 const genAI = new generative_ai_1.GoogleGenerativeAI(process.env.GOOGLE_API_KEY);
 // Initialize Qdrant client
 const qdrantClient = new js_client_rest_1.QdrantClient({
-    url: "https://3d196b01-67bd-48ce-be38-93174a6c7beb.us-west-1-0.aws.cloud.qdrant.io:6333",
-    apiKey: "1-epIrmYd_dp5OtFkttML7XYHCc4-uJgVgvrNaPZLNnvLCg7f22hVA",
+    url: process.env.QDRANT_URL,
+    apiKey: process.env.QDRANT_API_KEY,
 });
-const redisConnection = (0, redis_1.createClient)({
-    username: "default",
-    password: "t2sldAXuL6SgLCEm7lQcrlzdtnONlCsY",
-    socket: {
-        host: "redis-10979.c84.us-east-1-2.ec2.redns.redis-cloud.com",
-        port: 10979,
-    },
-});
-console.log(process.env.REDIS_URL);
+// In-memory storage for current session PDFs
+let sessionPDFs = [];
+let sessionCollections = new Set();
 const queue = new bullmq_1.Queue("file-upload-queue", {
     connection: {
         username: "default",
-        password: "t2sldAXuL6SgLCEm7lQcrlzdtnONlCsY",
-        host: "redis-10979.c84.us-east-1-2.ec2.redns.redis-cloud.com",
+        password: process.env.REDIS_PASSWORD,
+        host: process.env.REDIS_URL,
         port: 10979,
     },
+});
+// Function to clean up old collections on server start
+const cleanupOldCollections = () => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        console.log("Cleaning up old PDF collections...");
+        const collections = yield qdrantClient.getCollections();
+        for (const collection of collections.collections) {
+            if (collection.name.startsWith("pdf_") || collection.name === "pdf_metadata") {
+                try {
+                    yield qdrantClient.deleteCollection(collection.name);
+                    console.log(`Deleted old collection: ${collection.name}`);
+                }
+                catch (error) {
+                    console.error(`Error deleting collection ${collection.name}:`, error);
+                }
+            }
+        }
+        // Clean up uploads directory
+        const uploadsDir = "uploads/";
+        if (fs_1.default.existsSync(uploadsDir)) {
+            const files = fs_1.default.readdirSync(uploadsDir);
+            for (const file of files) {
+                try {
+                    fs_1.default.unlinkSync(path_1.default.join(uploadsDir, file));
+                    console.log(`Deleted old file: ${file}`);
+                }
+                catch (error) {
+                    console.error(`Error deleting file ${file}:`, error);
+                }
+            }
+        }
+        console.log("Cleanup completed");
+    }
+    catch (error) {
+        console.error("Error during cleanup:", error);
+    }
 });
 // Initialize the worker within the same process
 const worker = new bullmq_1.Worker("file-upload-queue", (job) => __awaiter(void 0, void 0, void 0, function* () {
@@ -96,47 +126,24 @@ const worker = new bullmq_1.Worker("file-upload-queue", (job) => __awaiter(void 
         }
         // Connect to Qdrant vector store with new collection
         const vectorStore = yield qdrant_1.QdrantVectorStore.fromExistingCollection(embeddings, {
-            url: "https://3d196b01-67bd-48ce-be38-93174a6c7beb.us-west-1-0.aws.cloud.qdrant.io:6333",
-            apiKey: "1-epIrmYd_dp5OtFkttML7XYHCc4-uJgVgvrNaPZLNnvLCg7f22hVA",
+            url: process.env.QDRANT_URL,
+            apiKey: process.env.QDRANT_API_KEY,
             collectionName: collectionName,
         });
         // Add documents to vector store
         yield vectorStore.addDocuments(splitDocs);
         console.log(`Successfully added ${splitDocs.length} chunks to collection: ${collectionName}`);
-        // Store metadata about this PDF in a separate collection for tracking
-        const metadataCollectionName = "pdf_metadata";
-        // Check if metadata collection exists
-        const metadataCollectionExists = collections.collections.some((collection) => collection.name === metadataCollectionName);
-        if (!metadataCollectionExists) {
-            // Create metadata collection if it doesn't exist
-            yield qdrantClient.createCollection(metadataCollectionName, {
-                vectors: {
-                    size: 1, // Minimal vector size as we just need to store metadata
-                    distance: "Dot",
-                },
-            });
-            console.log(`Created metadata collection: ${metadataCollectionName}`);
-        }
-        // Generate a numeric point ID for Qdrant (requires unsigned int or UUID)
-        const metadataPointId = Math.floor(Date.now() / 1000); // Use epoch seconds as integer ID
-        console.log(`Adding metadata with point ID: ${metadataPointId}`);
-        // Add metadata about this PDF
-        yield qdrantClient.upsert(metadataCollectionName, {
-            points: [
-                {
-                    id: metadataPointId,
-                    vector: [1.0], // Dummy vector
-                    payload: {
-                        pointId: metadataPointId, // Store ID in payload for reference
-                        originalFilename: data.filename,
-                        collectionName: collectionName,
-                        uploadTime: new Date().toISOString(),
-                        chunks: splitDocs.length,
-                    },
-                },
-            ],
-        });
-        console.log(`Successfully added metadata for ${collectionName}`);
+        // Add to session storage instead of persistent metadata collection
+        const pdfMetadata = {
+            pointId: Date.now(),
+            originalFilename: data.filename,
+            collectionName: collectionName,
+            uploadTime: new Date().toISOString(),
+            chunks: splitDocs.length,
+        };
+        sessionPDFs.push(pdfMetadata);
+        sessionCollections.add(collectionName);
+        console.log(`Successfully added PDF to session: ${collectionName}`);
         return { collectionName, chunks: splitDocs.length };
     }
     catch (error) {
@@ -147,8 +154,8 @@ const worker = new bullmq_1.Worker("file-upload-queue", (job) => __awaiter(void 
     concurrency: 5, // Limit concurrency to avoid overwhelming resources
     connection: {
         username: "default",
-        password: "t2sldAXuL6SgLCEm7lQcrlzdtnONlCsY",
-        host: "redis-10979.c84.us-east-1-2.ec2.redns.redis-cloud.com",
+        password: process.env.REDIS_PASSWORD,
+        host: process.env.REDIS_URL,
         port: 10979,
     },
 });
@@ -164,7 +171,12 @@ worker.on("completed", (job, result) => {
 });
 const storage = multer_1.default.diskStorage({
     destination: function (req, file, cb) {
-        cb(null, "uploads/");
+        // Create uploads directory if it doesn't exist
+        const uploadsDir = "uploads/";
+        if (!fs_1.default.existsSync(uploadsDir)) {
+            fs_1.default.mkdirSync(uploadsDir, { recursive: true });
+        }
+        cb(null, uploadsDir);
     },
     filename: function (req, file, cb) {
         const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
@@ -197,24 +209,12 @@ app.post("/upload/pdf", upload.single("pdf"), (req, res) => __awaiter(void 0, vo
         jobId: job.id,
     });
 }));
-// Get all available PDFs
+// Get all available PDFs (now returns session PDFs only)
 app.get("/pdfs", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
-        // Check if metadata collection exists
-        const collections = yield qdrantClient.getCollections();
-        const metadataCollectionExists = collections.collections.some((collection) => collection.name === "pdf_metadata");
-        if (!metadataCollectionExists) {
-            return res.json({ success: true, pdfs: [] });
-        }
-        // Get all PDF metadata
-        const response = yield qdrantClient.scroll("pdf_metadata", {
-            limit: 100,
-            with_payload: true,
-        });
-        const pdfs = response.points.map((point) => point.payload);
         return res.json({
             success: true,
-            pdfs,
+            pdfs: sessionPDFs,
         });
     }
     catch (error) {
@@ -270,34 +270,12 @@ function getComprehensiveContent(collectionsToSearch, embeddings) {
                     console.error(`Collection ${collection} doesn't exist:`, collectionError);
                     continue;
                 }
-                // Get metadata to find the original filename
+                // Get metadata from session storage
                 let originalFilename = collection; // Default fallback
-                try {
-                    const metadataResponse = yield qdrantClient.scroll("pdf_metadata", {
-                        filter: {
-                            must: [
-                                {
-                                    key: "collectionName",
-                                    match: {
-                                        value: collection,
-                                    },
-                                },
-                            ],
-                        },
-                        limit: 1,
-                        with_payload: true,
-                    });
-                    if (metadataResponse.points.length > 0) {
-                        originalFilename = metadataResponse.points[0].payload.originalFilename || collection;
-                        console.log(`Found metadata for ${collection}: ${originalFilename}`);
-                    }
-                    else {
-                        console.log(`No metadata found for ${collection}, using collection name as filename`);
-                    }
-                }
-                catch (metadataError) {
-                    console.error(`Error fetching metadata for ${collection}:`, metadataError);
-                    // Continue with default filename
+                const pdfMetadata = sessionPDFs.find(pdf => pdf.collectionName === collection);
+                if (pdfMetadata) {
+                    originalFilename = pdfMetadata.originalFilename;
+                    console.log(`Found session metadata for ${collection}: ${originalFilename}`);
                 }
                 // Get content from the collection using scroll (more reliable than similarity search for summaries)
                 try {
@@ -309,23 +287,23 @@ function getComprehensiveContent(collectionsToSearch, embeddings) {
                     console.log(`Retrieved ${scrollResponse.points.length} points from ${collection}`);
                     if (scrollResponse.points.length > 0) {
                         const contentChunks = scrollResponse.points
-                            .map(point => {
+                            .map((point) => {
                             var _a, _b;
                             // Handle different payload structures
-                            const content = ((_a = point.payload) === null || _a === void 0 ? void 0 : _a.pageContent) || ((_b = point.payload) === null || _b === void 0 ? void 0 : _b.content) || '';
+                            const content = ((_a = point.payload) === null || _a === void 0 ? void 0 : _a.pageContent) || ((_b = point.payload) === null || _b === void 0 ? void 0 : _b.content) || "";
                             return content;
                         })
-                            .filter(content => content && content.trim().length > 20) // More lenient filter
+                            .filter((content) => content && content.trim().length > 20) // More lenient filter
                             .slice(0, 10); // Take first 10 substantial chunks
                         console.log(`Filtered to ${contentChunks.length} substantial chunks from ${collection}`);
                         if (contentChunks.length > 0) {
-                            const combinedContent = contentChunks.join('\n\n');
+                            const combinedContent = contentChunks.join("\n\n");
                             allContent.push({
                                 filename: originalFilename,
                                 collectionName: collection,
                                 content: combinedContent,
                                 chunkCount: contentChunks.length,
-                                totalChunks: scrollResponse.points.length
+                                totalChunks: scrollResponse.points.length,
                             });
                             console.log(`Successfully added content from ${collection}: ${combinedContent.length} characters`);
                         }
@@ -343,23 +321,23 @@ function getComprehensiveContent(collectionsToSearch, embeddings) {
                     try {
                         console.log(`Trying vector store approach for ${collection}`);
                         const vectorStore = yield qdrant_1.QdrantVectorStore.fromExistingCollection(embeddings, {
-                            url: "https://3d196b01-67bd-48ce-be38-93174a6c7beb.us-west-1-0.aws.cloud.qdrant.io:6333",
-                            apiKey: "1-epIrmYd_dp5OtFkttML7XYHCc4-uJgVgvrNaPZLNnvLCg7f22hVA",
+                            url: process.env.QDRANT_URL,
+                            apiKey: process.env.QDRANT_API_KEY,
                             collectionName: collection,
                         });
                         // Use a generic query to get some content
                         const fallbackResults = yield vectorStore.similaritySearch("content document text", 5);
                         if (fallbackResults.length > 0) {
                             const contentChunks = fallbackResults
-                                .map(doc => doc.pageContent)
-                                .filter(content => content && content.trim().length > 20);
+                                .map((doc) => doc.pageContent)
+                                .filter((content) => content && content.trim().length > 20);
                             if (contentChunks.length > 0) {
                                 allContent.push({
                                     filename: originalFilename,
                                     collectionName: collection,
-                                    content: contentChunks.join('\n\n'),
+                                    content: contentChunks.join("\n\n"),
                                     chunkCount: contentChunks.length,
-                                    totalChunks: fallbackResults.length
+                                    totalChunks: fallbackResults.length,
                                 });
                                 console.log(`Fallback successful for ${collection}`);
                             }
@@ -379,7 +357,6 @@ function getComprehensiveContent(collectionsToSearch, embeddings) {
         return allContent;
     });
 }
-// Enhanced chat endpoint with better error handling and debugging
 // Enhanced chat endpoint with complete functionality
 app.get("/chat", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
@@ -391,20 +368,16 @@ app.get("/chat", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
                 success: false,
             });
         }
-        console.log(`Processing query: "${userQuery}" for collection: ${collectionName || 'all'}`);
-        // If collection is not specified, query the metadata to get all collections
+        console.log(`Processing query: "${userQuery}" for collection: ${collectionName || "all"}`);
+        // Use session collections instead of querying database
         let collectionsToSearch = [];
         if (collectionName) {
-            // First check if the requested collection exists
-            try {
-                const collectionInfo = yield qdrantClient.getCollection(collectionName);
-                if (collectionInfo) {
-                    collectionsToSearch = [collectionName];
-                    console.log(`Using specified collection: ${collectionName} (${collectionInfo.points_count} points)`);
-                }
+            // Check if the requested collection exists in session
+            if (sessionCollections.has(collectionName)) {
+                collectionsToSearch = [collectionName];
+                console.log(`Using specified session collection: ${collectionName}`);
             }
-            catch (err) {
-                console.error(`Collection ${collectionName} not found:`, err);
+            else {
                 return res.json({
                     success: false,
                     error: `The PDF collection "${collectionName}" was not found.`,
@@ -413,12 +386,9 @@ app.get("/chat", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
             }
         }
         else {
-            // If no collection specified, get all PDF collections
-            const collections = yield qdrantClient.getCollections();
-            collectionsToSearch = collections.collections
-                .filter((col) => col.name.startsWith("pdf_") && col.name !== "pdf_metadata")
-                .map((col) => col.name);
-            console.log(`Found ${collectionsToSearch.length} PDF collections: ${collectionsToSearch.join(', ')}`);
+            // Get all session collections
+            collectionsToSearch = Array.from(sessionCollections);
+            console.log(`Found ${collectionsToSearch.length} session PDF collections: ${collectionsToSearch.join(", ")}`);
             if (collectionsToSearch.length === 0) {
                 return res.json({
                     success: false,
@@ -435,7 +405,7 @@ app.get("/chat", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
         // Check if this is a summary request
         const isSummary = isSummaryRequest(userQuery);
         if (isSummary) {
-            console.log(`Detected summary request for ${collectionName ? 'specific PDF' : 'all PDFs'}`);
+            console.log(`Detected summary request for ${collectionName ? "specific PDF" : "all PDFs"}`);
             // Get comprehensive content for summary
             const comprehensiveContent = yield getComprehensiveContent(collectionsToSearch, embeddings);
             console.log(`Retrieved content from ${comprehensiveContent.length} PDFs for summary`);
@@ -447,31 +417,31 @@ app.get("/chat", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
                     query: userQuery,
                     debug: {
                         collectionsSearched: collectionsToSearch,
-                        contentFound: comprehensiveContent.length
-                    }
+                        contentFound: comprehensiveContent.length,
+                    },
                 });
             }
             // Create context for summary
             const summaryContext = comprehensiveContent
-                .map(pdf => `
+                .map((pdf) => `
 === ${pdf.filename} ===
 Chunks: ${pdf.chunkCount}/${pdf.totalChunks}
 Content:
 ${pdf.content}
         `)
-                .join('\n\n');
+                .join("\n\n");
             const SUMMARY_PROMPT = `
 You are an AI assistant that creates comprehensive summaries of PDF documents.
 Based on the provided content from ${comprehensiveContent.length} PDF document(s), create a detailed summary.
 
-${comprehensiveContent.length > 1 ?
-                `For each PDF, provide:
+${comprehensiveContent.length > 1
+                ? `For each PDF, provide:
 1. Main topics and themes
 2. Key findings or important information
 3. Any notable conclusions or recommendations
 
-Then provide an overall synthesis of all documents together.` :
-                `Provide:
+Then provide an overall synthesis of all documents together.`
+                : `Provide:
 1. Main topics and themes covered in the document
 2. Key findings or important information
 3. Any notable conclusions or recommendations`}
@@ -487,14 +457,14 @@ Please provide a comprehensive summary:`;
             const geminiResponse = yield model.generateContent(SUMMARY_PROMPT);
             const responseText = geminiResponse.response.text();
             // Format documents for response
-            const formattedDocs = comprehensiveContent.map(pdf => ({
+            const formattedDocs = comprehensiveContent.map((pdf) => ({
                 pageContent: pdf.content.substring(0, 500) + "...", // Truncate for response
                 metadata: {
                     source: pdf.filename,
                     collectionName: pdf.collectionName,
                     chunkCount: pdf.chunkCount,
                     totalChunks: pdf.totalChunks,
-                    type: "summary_content"
+                    type: "summary_content",
                 },
             }));
             return res.json({
@@ -503,7 +473,7 @@ Please provide a comprehensive summary:`;
                 documents: formattedDocs,
                 query: userQuery,
                 summaryMode: true,
-                pdfsProcessed: comprehensiveContent.length
+                pdfsProcessed: comprehensiveContent.length,
             });
         }
         // REGULAR QUESTION ANSWERING (Non-summary queries)
@@ -516,45 +486,27 @@ Please provide a comprehensive summary:`;
                 console.log(`Searching in collection: ${collection}`);
                 // Create vector store for this collection
                 const vectorStore = yield qdrant_1.QdrantVectorStore.fromExistingCollection(embeddings, {
-                    url: "https://3d196b01-67bd-48ce-be38-93174a6c7beb.us-west-1-0.aws.cloud.qdrant.io:6333",
-                    apiKey: "1-epIrmYd_dp5OtFkttML7XYHCc4-uJgVgvrNaPZLNnvLCg7f22hVA",
+                    url: process.env.QDRANT_URL,
+                    apiKey: process.env.QDRANT_API_KEY,
                     collectionName: collection,
                 });
                 // Perform similarity search
                 const docs = yield vectorStore.similaritySearch(userQuery, 4); // Get top 4 relevant chunks
                 console.log(`Found ${docs.length} relevant documents in ${collection}`);
                 if (docs.length > 0) {
-                    // Get original filename from metadata
+                    // Get original filename from session storage
                     let originalFilename = collection;
-                    try {
-                        const metadataResponse = yield qdrantClient.scroll("pdf_metadata", {
-                            filter: {
-                                must: [
-                                    {
-                                        key: "collectionName",
-                                        match: {
-                                            value: collection,
-                                        },
-                                    },
-                                ],
-                            },
-                            limit: 1,
-                            with_payload: true,
-                        });
-                        if (metadataResponse.points.length > 0) {
-                            originalFilename = metadataResponse.points[0].payload.originalFilename || collection;
-                        }
-                    }
-                    catch (metadataError) {
-                        console.error(`Error fetching metadata for ${collection}:`, metadataError);
+                    const pdfMetadata = sessionPDFs.find(pdf => pdf.collectionName === collection);
+                    if (pdfMetadata) {
+                        originalFilename = pdfMetadata.originalFilename;
                     }
                     // Add collection info to documents
-                    const docsWithCollection = docs.map(doc => (Object.assign(Object.assign({}, doc), { metadata: Object.assign(Object.assign({}, doc.metadata), { collectionName: collection, originalFilename: originalFilename }) })));
+                    const docsWithCollection = docs.map((doc) => (Object.assign(Object.assign({}, doc), { metadata: Object.assign(Object.assign({}, doc.metadata), { collectionName: collection, originalFilename: originalFilename }) })));
                     allRelevantDocs.push(...docsWithCollection);
                     searchResults.push({
                         collection,
                         originalFilename,
-                        docCount: docs.length
+                        docCount: docs.length,
                     });
                 }
             }
@@ -570,13 +522,13 @@ Please provide a comprehensive summary:`;
                 message: "I couldn't find any relevant information in the uploaded PDFs to answer your question. Try rephrasing your question or asking about different topics covered in the documents.",
                 documents: [],
                 query: userQuery,
-                searchResults: searchResults
+                searchResults: searchResults,
             });
         }
         // Prepare context for the AI model
         const context = allRelevantDocs
             .map((doc, index) => {
-            const filename = doc.metadata.originalFilename || 'Unknown PDF';
+            const filename = doc.metadata.originalFilename || "Unknown PDF";
             return `[Document ${index + 1} - ${filename}]\n${doc.pageContent}`;
         })
             .join("\n\n");
@@ -607,13 +559,13 @@ Please provide a detailed answer based on the information in the documents:`;
         return res.json({
             success: true,
             message: responseText,
-            documents: allRelevantDocs.map(doc => ({
+            documents: allRelevantDocs.map((doc) => ({
                 pageContent: doc.pageContent,
-                metadata: doc.metadata
+                metadata: doc.metadata,
             })),
             query: userQuery,
             searchResults: searchResults,
-            totalDocuments: allRelevantDocs.length
+            totalDocuments: allRelevantDocs.length,
         });
     }
     catch (error) {
@@ -622,7 +574,7 @@ Please provide a detailed answer based on the information in the documents:`;
             success: false,
             error: "Internal server error",
             message: "Sorry, I encountered an error processing your request.",
-            debug: error.message
+            debug: error.message,
         });
     }
 }));
@@ -653,48 +605,20 @@ app.get("/job/:id", (req, res) => __awaiter(void 0, void 0, void 0, function* ()
         });
     }
 }));
-// Delete PDF endpoint
+// Delete PDF endpoint (now removes from session)
 app.delete("/pdf/:collectionName", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const { collectionName } = req.params;
-        // Find the metadata entry for this collection
-        const metadataResponse = yield qdrantClient.scroll("pdf_metadata", {
-            filter: {
-                must: [
-                    {
-                        key: "collectionName",
-                        match: {
-                            value: collectionName,
-                        },
-                    },
-                ],
-            },
-            limit: 1,
-            with_payload: true,
-            with_vectors: false,
-        });
-        // Try to delete the collection
+        // Remove from session storage
+        sessionPDFs = sessionPDFs.filter(pdf => pdf.collectionName !== collectionName);
+        sessionCollections.delete(collectionName);
+        // Try to delete the collection from Qdrant
         try {
             yield qdrantClient.deleteCollection(collectionName);
             console.log(`Collection ${collectionName} deleted successfully`);
         }
         catch (collectionError) {
             console.error(`Error deleting collection ${collectionName}:`, collectionError);
-            // Continue anyway to clean up metadata
-        }
-        // If metadata entry was found, delete it
-        if (metadataResponse.points.length > 0) {
-            const point = metadataResponse.points[0];
-            const pointId = point.id;
-            console.log(`Deleting metadata point with ID: ${pointId} for collection: ${collectionName}`);
-            // Remove from metadata using the correct point ID format
-            yield qdrantClient.delete("pdf_metadata", {
-                points: [pointId], // Use the ID directly from the point
-            });
-            console.log(`Metadata for collection ${collectionName} deleted successfully`);
-        }
-        else {
-            console.log(`No metadata found for collection ${collectionName}`);
         }
         return res.json({
             success: true,
@@ -709,8 +633,40 @@ app.delete("/pdf/:collectionName", (req, res) => __awaiter(void 0, void 0, void 
         });
     }
 }));
+// Clear all session data endpoint (optional)
+app.post("/clear-session", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        // Clear session data
+        for (const collectionName of sessionCollections) {
+            try {
+                yield qdrantClient.deleteCollection(collectionName);
+                console.log(`Deleted collection: ${collectionName}`);
+            }
+            catch (error) {
+                console.error(`Error deleting collection ${collectionName}:`, error);
+            }
+        }
+        sessionPDFs = [];
+        sessionCollections.clear();
+        return res.json({
+            success: true,
+            message: "Session cleared successfully",
+        });
+    }
+    catch (error) {
+        console.error("Error clearing session:", error);
+        return res.status(500).json({
+            success: false,
+            error: "Failed to clear session",
+        });
+    }
+}));
 const PORT = process.env.PORT || 8000;
-app.listen(PORT, () => {
-    console.log(`Server started on PORT: ${PORT}`);
-    console.log("Worker started and listening for jobs...");
+// Clean up old collections on server start
+cleanupOldCollections().then(() => {
+    app.listen(PORT, () => {
+        console.log(`Server started on PORT: ${PORT}`);
+        console.log("Worker started and listening for jobs...");
+        console.log("Session-based PDF storage initialized");
+    });
 });
