@@ -40,17 +40,17 @@ const SignInPrompt = ({ onClose }) => {
           Please sign in or create an account to use this feature.
         </p>
         <div className="flex flex-col sm:flex-row gap-4">
-          <SignInButton mode="modal">
+          <SignInButton mode="modal" forceRedirectUrl="/sync">
             <button className="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-2 px-4 rounded transition-colors">
               Sign In
             </button>
           </SignInButton>
           
-          <SignUpButton mode="modal">
+          {/* <SignUpButton mode="modal">
             <button className="w-full bg-[#2D2D2D] hover:bg-[#3D3D3D] text-white py-2 px-4 rounded transition-colors">
               Sign Up
             </button>
-          </SignUpButton>
+          </SignUpButton> */}
         </div>
         
         <button 

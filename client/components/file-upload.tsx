@@ -3,7 +3,7 @@
 
 import { Upload, CheckCircle, AlertCircle, Loader2 } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
-import { useAuth } from "@clerk/nextjs";
+import { useAuth, useUser } from "@clerk/nextjs";
 import SignInPrompt from "./prompt";
 
 enum UploadStatus {
@@ -25,6 +25,7 @@ const FileUploadComponent = () => {
   const [jobId, setJobId] = useState<string | null>(null);
   const fileInputRef = useRef(null);
   const { isSignedIn } = useAuth();
+  const { user, isLoaded: userLoaded } = useUser();
 
   // Check job status periodically if there's an active job
   useEffect(() => {
@@ -145,6 +146,7 @@ const FileUploadComponent = () => {
   };
 
   const handleAreaClick = () => {
+     console.log(user);
     if (!isUploading && !isProcessing) {
       if (!isSignedIn) {
         setShowAuthPrompt(true);

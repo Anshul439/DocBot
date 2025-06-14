@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import ChatComponent from "../components/chat";
 import FileUploadComponent from "../components/file-upload";
 import PDFListComponent from "../components/pdf-list";
-import { UserButton, SignInButton, SignUpButton, useAuth } from "@clerk/nextjs";
+import { UserButton, SignInButton, SignUpButton, useAuth, useUser } from "@clerk/nextjs";
 
 interface IMessage {
   role: "assistant" | "user";
@@ -22,10 +22,13 @@ export default function Home() {
   >({
     all: [],
   });
+    const { user, isLoaded: userLoaded } = useUser();
+  const { getToken, isLoaded: authLoaded } = useAuth();
 
 
   // Listen for PDF upload events
   useEffect(() => {
+     console.log(user);
     fetchAvailablePDFs();
     const handlePdfUploaded = () => {
       fetchAvailablePDFs();
@@ -82,16 +85,11 @@ export default function Home() {
         <div className="flex items-center space-x-4">
           {!isSignedIn ? (
             <>
-              <SignInButton mode="modal">
-                <button className="px-4 py-2 rounded-md bg-transparent hover:bg-[#1A1A1A] transition-colors">
+              <SignInButton mode="modal" forceRedirectUrl="/sync">
+                <button className="px-4 py-2 rounded-md bg-indigo-600 hover:bg-indigo-700 transition-colors">
                   Sign In
                 </button>
               </SignInButton>
-              <SignUpButton mode="modal">
-                <button className="px-4 py-2 rounded-md bg-indigo-600 hover:bg-indigo-700 transition-colors">
-                  Sign Up
-                </button>
-              </SignUpButton>
             </>
           ) : (
             <UserButton afterSignOutUrl="/" />

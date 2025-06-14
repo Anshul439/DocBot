@@ -25,7 +25,9 @@ const generative_ai_1 = require("@google/generative-ai");
 const js_client_rest_1 = require("@qdrant/js-client-rest");
 const pdf_1 = require("@langchain/community/document_loaders/fs/pdf");
 const textsplitters_1 = require("@langchain/textsplitters");
+const user_route_js_1 = __importDefault(require("./routes/user.route.js"));
 const fs_1 = __importDefault(require("fs"));
+const mongoose_1 = __importDefault(require("mongoose"));
 const genAI = new generative_ai_1.GoogleGenerativeAI(process.env.GOOGLE_API_KEY);
 // Initialize Qdrant client
 const qdrantClient = new js_client_rest_1.QdrantClient({
@@ -662,6 +664,11 @@ app.post("/clear-session", (req, res) => __awaiter(void 0, void 0, void 0, funct
     }
 }));
 const PORT = process.env.PORT || 8000;
+mongoose_1.default
+    .connect(process.env.MONGO_URI)
+    .then(() => console.log("MongoDB connected"))
+    .catch((err) => console.error("MongoDB connection error:", err));
+app.use("/api/users", user_route_js_1.default);
 // Clean up old collections on server start
 cleanupOldCollections().then(() => {
     app.listen(PORT, () => {

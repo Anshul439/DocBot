@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import {
   ClerkProvider,
+  SignedIn,
   UserButton,
 } from "@clerk/nextjs";
 
@@ -32,9 +33,6 @@ export default function RootLayout({
         <body
           className={`${geistSans.variable} ${geistMono.variable} antialiased`}
         >
-          <div className="absolute right-4 top-4 z-10">
-            <UserButton afterSignOutUrl="/" />
-          </div>
           {children}
         </body>
       </html>

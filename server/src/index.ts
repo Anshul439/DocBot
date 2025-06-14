@@ -12,8 +12,10 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 import { QdrantClient } from "@qdrant/js-client-rest";
 import { PDFLoader } from "@langchain/community/document_loaders/fs/pdf";
 import { CharacterTextSplitter } from "@langchain/textsplitters";
+import userRoutes from "./routes/user.route.js";
 import { createClient } from "redis";
 import fs from "fs";
+import mongoose from "mongoose";
 
 const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY);
 
@@ -813,6 +815,13 @@ app.post("/clear-session", async (req: Request, res: Response) => {
 });
 
 const PORT = process.env.PORT || 8000;
+
+mongoose
+  .connect(process.env.MONGO_URI!)
+  .then(() => console.log("MongoDB connected"))
+  .catch((err) => console.error("MongoDB connection error:", err));
+
+app.use("/api/users", userRoutes);
 
 // Clean up old collections on server start
 cleanupOldCollections().then(() => {
