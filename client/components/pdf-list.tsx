@@ -1,6 +1,7 @@
 "use client";
 
 import { Trash2Icon } from "lucide-react";
+import { useAuth } from "@clerk/nextjs";
 
 const PDFListComponent = ({ 
   pdfs, 
@@ -13,40 +14,40 @@ const PDFListComponent = ({
   setSelectedPDF: (collectionName: string | null) => void;
   onRefresh: () => void;
 }) => {
-const handleDeletePDF = async (collectionName: string, event: React.MouseEvent) => {
-  event.stopPropagation();
+  const { getToken } = useAuth();
 
-  try {
-    const response = await fetch(
-      `http://localhost:8000/pdf/${collectionName}`,
-      {
-        method: "DELETE",
-      }
-    );
+  const handleDeletePDF = async (collectionName: string, event: React.MouseEvent) => {
+    event.stopPropagation();
 
-    const data = await response.json();
+    try {
+      const token = await getToken();
+      const response = await fetch(
+        `http://localhost:8000/pdf/${collectionName}`,
+        {
+          method: "DELETE",
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
 
-    if (data.success) {
-      onRefresh(); // This will trigger the parent to refresh the PDF list
-      
-      // Check if this was the last PDF being deleted
-      if (pdfs.length === 1) {
-        // Clear the "all" chat history
-        setSelectedPDF(null);
+      const data = await response.json();
+
+      if (data.success) {
+        onRefresh();
         
-        // If you have access to updateChatHistory in this component, add:
-        // updateChatHistory(null, []);
-        // Otherwise, we'll handle this in the parent component
+        if (pdfs.length === 1) {
+          setSelectedPDF(null);
+        }
+        
+        if (selectedPDF === collectionName) {
+          setSelectedPDF(null);
+        }
       }
-      
-      if (selectedPDF === collectionName) {
-        setSelectedPDF(null);
-      }
+    } catch (error) {
+      console.error("Error deleting PDF:", error);
     }
-  } catch (error) {
-    console.error("Error deleting PDF:", error);
-  }
-};
+  };
 
   if (!pdfs || pdfs.length === 0) {
     return (
@@ -57,17 +58,11 @@ const handleDeletePDF = async (collectionName: string, event: React.MouseEvent) 
   }
 
   return (
-    <div
-      className="flex-1 overflow-y-auto 
-      [&::-webkit-scrollbar]:w-2 
-      [&::-webkit-scrollbar-thumb]:rounded-full 
-      [&::-webkit-scrollbar-thumb]:bg-gray-700 
-      [&::-webkit-scrollbar-track]:bg-gray-900"
-    >
-      <div className="space-y-2">
+    <div className="flex-1 overflow-y-auto">
+      <div className="space-y-1 md:space-y-2">
         <button
           onClick={() => setSelectedPDF(null)}
-          className={`w-full text-left text-sm px-4 py-3 rounded-md flex items-center justify-between ${
+          className={`w-full text-left text-xs md:text-sm px-3 py-2 md:px-4 md:py-3 rounded-md flex items-center justify-between ${
             selectedPDF === null
               ? "bg-indigo-600 text-white"
               : "bg-[#1A1A1A] text-gray-300 hover:bg-[#252525]"
@@ -87,7 +82,7 @@ const handleDeletePDF = async (collectionName: string, event: React.MouseEvent) 
           >
             <button
               onClick={() => setSelectedPDF(pdf.collectionName)}
-              className="w-full text-left text-sm px-4 py-3 flex items-center justify-between"
+              className="w-full text-left text-xs md:text-sm px-3 py-2 md:px-4 md:py-3 flex items-center justify-between"
             >
               <div className="flex-1 overflow-hidden">
                 <div className="font-medium truncate">
@@ -99,10 +94,10 @@ const handleDeletePDF = async (collectionName: string, event: React.MouseEvent) 
               </div>
               <button
                 onClick={(e) => handleDeletePDF(pdf.collectionName, e)}
-                className="ml-2 p-1.5 text-inherit opacity-60 hover:opacity-100 rounded hover:bg-black hover:bg-opacity-20"
+                className="ml-2 p-1 md:p-1.5 text-inherit opacity-60 hover:opacity-100 rounded hover:bg-black hover:bg-opacity-20"
                 title="Delete PDF"
               >
-                <Trash2Icon size={16} />
+                <Trash2Icon size={14} className="md:w-4 md:h-4" />
               </button>
             </button>
           </div>

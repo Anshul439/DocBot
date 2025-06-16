@@ -35,7 +35,7 @@ interface ChatComponentProps {
     collectionName: string;
     originalFilename: string;
   }>;
-  hasPDFs: boolean; // Add this
+  hasPDFs: boolean;
 }
 
 const ChatComponent = ({
@@ -162,35 +162,28 @@ const ChatComponent = ({
   return (
     <div className="flex flex-col h-full">
       {/* Status bar showing which PDF is selected */}
-      {isSignedIn &&
-        hasPDFs && ( // Only show if signed in AND hasPDFs
-          <div className="border-b border-gray-800 p-3 text-sm text-gray-400">
-            {selectedPDF ? (
-              <span>
-                Chatting with:{" "}
-                <span className="text-indigo-400 font-medium">
-                  {availablePDFs?.find(
-                    (pdf) => pdf.collectionName === selectedPDF
-                  )?.originalFilename || "Selected PDF"}
-                </span>
+      {isSignedIn && hasPDFs && (
+        <div className="border-b border-gray-800 p-2 md:p-3 text-xs md:text-sm text-gray-400">
+          {selectedPDF ? (
+            <span>
+              Chatting with:{" "}
+              <span className="text-indigo-400 font-medium">
+                {availablePDFs?.find(
+                  (pdf) => pdf.collectionName === selectedPDF
+                )?.originalFilename || "Selected PDF"}
               </span>
-            ) : (
-              <span>
-                Chatting with:{" "}
-                <span className="text-indigo-400 font-medium">All PDFs</span>
-              </span>
-            )}
-          </div>
-        )}
+            </span>
+          ) : (
+            <span>
+              Chatting with:{" "}
+              <span className="text-indigo-400 font-medium">All PDFs</span>
+            </span>
+          )}
+        </div>
+      )}
 
       {/* Messages area */}
-      <div
-        className="flex-1 overflow-y-auto p-4 space-y-4 
-          [&::-webkit-scrollbar]:w-2 
-          [&::-webkit-scrollbar-thumb]:rounded-full 
-          [&::-webkit-scrollbar-thumb]:bg-gray-700 
-          [&::-webkit-scrollbar-track]:bg-gray-900"
-      >
+      <div className="flex-1 overflow-y-auto p-2 md:p-4 space-y-3 md:space-y-4">
         {chatHistory.map((msg, index) => (
           <div
             key={index}
@@ -202,7 +195,7 @@ const ChatComponent = ({
               {msg.timestamp || formatTime()}
             </div>
             <div
-              className={`max-w-[80%] p-3 rounded-lg ${
+              className={`max-w-[90%] md:max-w-[80%] p-2 md:p-3 rounded-lg text-sm md:text-base ${
                 msg.role === "user"
                   ? "bg-indigo-600 text-white"
                   : "bg-[#1A1A1A] text-white"
@@ -219,7 +212,7 @@ const ChatComponent = ({
                 msg.content
               )}
               {msg.documents && msg.documents.length > 0 && (
-                <div className="mt-2 text-xs text-gray-300">
+                <div className="mt-2 text-xs opacity-70">
                   <p className="font-semibold">Sources:</p>
                   <ul className="list-disc pl-4 space-y-1">
                     {msg.documents.map((doc, i) => (
@@ -227,7 +220,7 @@ const ChatComponent = ({
                         {doc.metadata?.source || "Document"} (Page{" "}
                         {doc.metadata?.loc?.pageNumber || "N/A"})
                         {doc.metadata?.score && (
-                          <span className="ml-1 opacity-70">
+                          <span className="ml-1">
                             [Score: {doc.metadata.score.toFixed(2)}]
                           </span>
                         )}
@@ -260,7 +253,7 @@ const ChatComponent = ({
       </div>
 
       {/* Input area */}
-      <div className="p-4">
+      <div className="p-2 md:p-4">
         <div className="flex items-center bg-[#0F0F0F] rounded-lg overflow-hidden border border-gray-800">
           <input
             type="text"
@@ -271,22 +264,22 @@ const ChatComponent = ({
             placeholder={
               hasPDFs
                 ? selectedPDF
-                  ? "Ask a question about this PDF..."
-                  : "Ask a question about your PDFs..."
+                  ? "Ask about this PDF..."
+                  : "Ask about your PDFs..."
                 : "Upload a PDF to start chatting..."
             }
-            className="flex-1 bg-[#0F0F0F] text-white p-3 px-4 focus:outline-none"
+            className="flex-1 bg-[#0F0F0F] text-white p-2 md:p-3 px-3 md:px-4 focus:outline-none text-sm md:text-base"
           />
           <button
             onClick={handleSendMessage}
             disabled={!message.trim() || loading}
-            className={`p-2 rounded-lg mx-1 ${
+            className={`p-1 md:p-2 rounded-lg mx-1 ${
               !message.trim() || loading
                 ? "opacity-50 cursor-not-allowed"
                 : "bg-indigo-600 hover:bg-indigo-700 transition-all duration-200"
             }`}
           >
-            <SendIcon className="h-5 w-5 text-white" />
+            <SendIcon className="h-4 w-4 md:h-5 md:w-5 text-white" />
           </button>
         </div>
       </div>

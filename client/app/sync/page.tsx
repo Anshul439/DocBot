@@ -17,13 +17,11 @@ export default function SyncPage() {
       try {
         setError(null);
 
-        // Wait for authentication to fully load
         if (!userLoaded || !authLoaded) {
           setLoadingMessage("Loading authentication...");
           return;
         }
 
-        // Check if user has required data
         if (!user?.id || !user.emailAddresses?.[0]?.emailAddress) {
           setLoadingMessage("Loading user data...");
           return;
@@ -103,29 +101,11 @@ export default function SyncPage() {
     handleUserSync();
   }, [user, userLoaded, authLoaded, getToken, router]);
 
-  // Show error state
-  // if (error) {
-  //   return (
-  //     <div className="flex flex-col items-center justify-center min-h-screen p-4 bg-gray-50">
-  //       <div className="text-center max-w-md">
-  //         <div className="text-red-500 text-xl mb-4">⚠️ Error</div>
-  //         <p className="text-gray-700 mb-4">{error}</p>
-  //         <button
-  //           onClick={() => window.location.reload()}
-  //           className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors"
-  //         >
-  //           Retry
-  //         </button>
-  //       </div>
-  //     </div>
-  //   );
-  // }
-
-  // Show continuous loading state
   return (
     <div className="flex flex-col items-center justify-center min-h-screen p-4 bg-gray-50">
       <div className="text-center">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
+        <p className="text-gray-700">{loadingMessage}</p>
       </div>
     </div>
   );

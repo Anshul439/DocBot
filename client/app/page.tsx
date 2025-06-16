@@ -4,7 +4,8 @@ import { useEffect, useState } from "react";
 import ChatComponent from "../components/chat";
 import FileUploadComponent from "../components/file-upload";
 import PDFListComponent from "../components/pdf-list";
-import { UserButton, SignInButton, SignUpButton, useAuth, useUser } from "@clerk/nextjs";
+import { UserButton, SignInButton, useAuth, useUser } from "@clerk/nextjs";
+import { Menu, X } from "lucide-react";
 
 interface IMessage {
   role: "assistant" | "user";
@@ -17,19 +18,14 @@ export default function Home() {
   const { isSignedIn } = useAuth();
   const [availablePDFs, setAvailablePDFs] = useState([]);
   const [selectedPDF, setSelectedPDF] = useState<string | null>(null);
-  const [chatHistories, setChatHistories] = useState<
-    Record<string, IMessage[]>
-  >({
-    all: [],
-  });
-    const { user, isLoaded: userLoaded } = useUser();
+  const [chatHistories, setChatHistories] = useState<Record<string, IMessage[]>>({ all: [] });
+  const { user, isLoaded: userLoaded } = useUser();
   const { getToken, isLoaded: authLoaded } = useAuth();
   const [hasPDFs, setHasPDFs] = useState(false);
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
 
-
-  // Listen for PDF upload events
   useEffect(() => {
-     console.log(user);
+    console.log(user);
     fetchAvailablePDFs();
     const handlePdfUploaded = () => {
       fetchAvailablePDFs();
@@ -39,70 +35,66 @@ export default function Home() {
     return () => window.removeEventListener("pdf-uploaded", handlePdfUploaded);
   }, []);
 
-const fetchAvailablePDFs = async () => {
-  try {
-    const response = await fetch("http://localhost:8000/pdfs");
-    const data = await response.json();
+  const fetchAvailablePDFs = async () => {
+    try {
+      const response = await fetch("http://localhost:8000/pdfs");
+      const data = await response.json();
 
-    if (data.success && data.pdfs) {
-      setAvailablePDFs(data.pdfs);
-      setHasPDFs(data.pdfs.length > 0); // Track if we have any PDFs
+      if (data.success && data.pdfs) {
+        setAvailablePDFs(data.pdfs);
+        setHasPDFs(data.pdfs.length > 0);
 
-      // Only initialize new PDF chat histories without overwriting existing ones
-      setChatHistories((prev) => {
-        const newHistories = { ...prev };
-        data.pdfs.forEach((pdf: any) => {
-          if (!newHistories[pdf.collectionName]) {
-            newHistories[pdf.collectionName] = [];
-          }
+        setChatHistories((prev) => {
+          const newHistories = { ...prev };
+          data.pdfs.forEach((pdf: any) => {
+            if (!newHistories[pdf.collectionName]) {
+              newHistories[pdf.collectionName] = [];
+            }
+          });
+          return newHistories;
         });
-        return newHistories;
-      });
-    } else {
+      } else {
+        setHasPDFs(false);
+      }
+    } catch (error) {
+      console.error("Error fetching PDFs:", error);
       setHasPDFs(false);
     }
-  } catch (error) {
-    console.error("Error fetching PDFs:", error);
-    setHasPDFs(false);
-  }
-};
+  };
 
   const fetchChatHistory = async (collectionName: string | null) => {
-  try {
-    const token = await getToken();
-    const response = await fetch(`http://localhost:8000/chat/history?collectionName=${collectionName || ''}`, {
-      headers: {
-        Authorization: `Bearer ${token}`
+    try {
+      const token = await getToken();
+      const response = await fetch(`http://localhost:8000/chat/history?collectionName=${collectionName || ''}`, {
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      });
+      
+      const data = await response.json();
+      
+      if (data.success) {
+        updateChatHistory(collectionName, data.messages.map((msg: any) => ({
+          role: msg.role,
+          content: msg.content,
+          documents: msg.documents,
+          timestamp: msg.timestamp
+        })));
       }
-    });
-    
-    const data = await response.json();
-    
-    if (data.success) {
-      updateChatHistory(collectionName, data.messages.map((msg: any) => ({
-        role: msg.role,
-        content: msg.content,
-        documents: msg.documents,
-        timestamp: msg.timestamp
-      })));
+    } catch (error) {
+      console.error("Error fetching chat history:", error);
     }
-  } catch (error) {
-    console.error("Error fetching chat history:", error);
-  }
-};
+  };
 
-// Update your handleSelectPDF function
-const handleSelectPDF = (collectionName: string | null) => {
-  setSelectedPDF(collectionName);
-  if (isSignedIn) {
-    fetchChatHistory(collectionName);
-  }
-};
+  const handleSelectPDF = (collectionName: string | null) => {
+    setSelectedPDF(collectionName);
+    if (isSignedIn) {
+      fetchChatHistory(collectionName);
+    }
+    setMobileSidebarOpen(false);
+  };
 
-  const updateChatHistory = (
-    collectionName: string | null,
-    messages: IMessage[]
-  ) => {
+  const updateChatHistory = (collectionName: string | null, messages: IMessage[]) => {
     const key = collectionName || "all";
     setChatHistories((prev) => ({
       ...prev,
@@ -114,16 +106,22 @@ const handleSelectPDF = (collectionName: string | null) => {
     <div className="bg-[#000000f7] text-white h-screen flex flex-col">
       {/* Header */}
       <div className="p-4 border-b border-gray-800 flex justify-between items-center">
-        <h1 className="text-xl font-bold">PDF Chat Assistant</h1>
+        <div className="flex items-center space-x-4">
+          <button 
+            className="md:hidden"
+            onClick={() => setMobileSidebarOpen(!mobileSidebarOpen)}
+          >
+            {mobileSidebarOpen ? <X size={24} /> : <Menu size={24} />}
+          </button>
+          <h1 className="text-xl font-bold">PDF Chat Assistant</h1>
+        </div>
         <div className="flex items-center space-x-4">
           {!isSignedIn ? (
-            <>
-              <SignInButton mode="modal" forceRedirectUrl="/sync">
-                <button className="px-4 py-2 rounded-md bg-indigo-600 hover:bg-indigo-700 transition-colors">
-                  Sign In
-                </button>
-              </SignInButton>
-            </>
+            <SignInButton mode="modal" forceRedirectUrl="/sync">
+              <button className="px-4 py-2 rounded-md bg-indigo-600 hover:bg-indigo-700 transition-colors text-sm md:text-base">
+                Sign In
+              </button>
+            </SignInButton>
           ) : (
             <UserButton afterSignOutUrl="/" />
           )}
@@ -131,8 +129,8 @@ const handleSelectPDF = (collectionName: string | null) => {
       </div>
 
       <div className="flex flex-1 flex-col md:flex-row overflow-hidden">
-        {/* Left Side Panel */}
-        <div className="w-full md:w-[30%] border-r border-gray-800 flex flex-col overflow-hidden">
+        {/* Left Side Panel - Mobile Overlay */}
+        <div className={`${mobileSidebarOpen ? 'block' : 'hidden'} md:block fixed md:relative inset-0 z-40 md:z-auto w-full md:w-[30%] bg-[#000000f7] md:bg-transparent border-r border-gray-800 flex flex-col overflow-y-auto`}>
           <div className="p-4 h-1/2 flex flex-col overflow-hidden">
             <h2 className="text-xl mb-4">Upload PDF</h2>
             <FileUploadComponent />
@@ -150,18 +148,24 @@ const handleSelectPDF = (collectionName: string | null) => {
         </div>
 
         {/* Chat Section */}
-        <div className="w-full md:w-[70%] overflow-hidden">
-         <ChatComponent
-  selectedPDF={selectedPDF}
-  chatHistory={
-    selectedPDF
-      ? chatHistories[selectedPDF] || []
-      : chatHistories["all"]
-  }
-  updateChatHistory={updateChatHistory}
-  availablePDFs={availablePDFs}
-  hasPDFs={hasPDFs} // Add this prop
-/>
+        <div className="w-full md:w-[70%] overflow-hidden relative">
+          {mobileSidebarOpen && (
+            <div 
+              className="md:hidden fixed inset-0 bg-black bg-opacity-50 z-30"
+              onClick={() => setMobileSidebarOpen(false)}
+            />
+          )}
+          <ChatComponent
+            selectedPDF={selectedPDF}
+            chatHistory={
+              selectedPDF
+                ? chatHistories[selectedPDF] || []
+                : chatHistories["all"]
+            }
+            updateChatHistory={updateChatHistory}
+            availablePDFs={availablePDFs}
+            hasPDFs={hasPDFs}
+          />
         </div>
       </div>
     </div>
