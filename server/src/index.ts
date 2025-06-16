@@ -16,6 +16,7 @@ import userRoutes from "./routes/user.route.js";
 import { createClient } from "redis";
 import fs from "fs";
 import mongoose from "mongoose";
+import PDFMetadata from "./models/pdf.model.js";
 
 const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY);
 
@@ -151,19 +152,17 @@ const worker = new Worker(
         `Successfully added ${splitDocs.length} chunks to collection: ${collectionName}`
       );
 
-      // Add to session storage instead of persistent metadata collection
-      const pdfMetadata = {
-        pointId: Date.now(),
+
+     const pdfMetadata = new PDFMetadata({
         originalFilename: data.filename,
         collectionName: collectionName,
-        uploadTime: new Date().toISOString(),
+        uploadTime: new Date(),
         chunks: splitDocs.length,
-      };
+        filePath: data.path
+      });
 
-      sessionPDFs.push(pdfMetadata);
-      sessionCollections.add(collectionName);
-
-      console.log(`Successfully added PDF to session: ${collectionName}`);
+      await pdfMetadata.save();
+      console.log(`Successfully saved PDF metadata to MongoDB: ${collectionName}`);
 
       return { collectionName, chunks: splitDocs.length };
     } catch (error) {
@@ -252,9 +251,10 @@ app.post(
 // Get all available PDFs (now returns session PDFs only)
 app.get("/pdfs", async (req: Request, res: Response) => {
   try {
+    const pdfs = await PDFMetadata.find().sort({ uploadTime: -1 });
     return res.json({
       success: true,
-      pdfs: sessionPDFs,
+      pdfs: pdfs,
     });
   } catch (error) {
     console.error("Error fetching PDFs:", error);
@@ -458,28 +458,21 @@ app.get("/chat", async (req, res) => {
     );
 
     // Use session collections instead of querying database
-    let collectionsToSearch = [];
-
+ let collectionsToSearch = [];
     if (collectionName) {
-      // Check if the requested collection exists in session
-      if (sessionCollections.has(collectionName)) {
-        collectionsToSearch = [collectionName];
-        console.log(`Using specified session collection: ${collectionName}`);
-      } else {
+      const pdf = await PDFMetadata.findOne({ collectionName });
+      if (!pdf) {
         return res.json({
           success: false,
           error: `The PDF collection "${collectionName}" was not found.`,
           message: "This PDF may have been deleted or is not accessible.",
         });
       }
+      collectionsToSearch = [collectionName];
     } else {
-      // Get all session collections
-      collectionsToSearch = Array.from(sessionCollections);
-
-      console.log(
-        `Found ${collectionsToSearch.length} session PDF collections: ${collectionsToSearch.join(", ")}`
-      );
-
+      const allPDFs = await PDFMetadata.find();
+      collectionsToSearch = allPDFs.map(pdf => pdf.collectionName);
+      
       if (collectionsToSearch.length === 0) {
         return res.json({
           success: false,
@@ -757,24 +750,37 @@ app.delete("/pdf/:collectionName", async (req: Request, res: Response) => {
   try {
     const { collectionName } = req.params;
 
-    // Remove from session storage
-    sessionPDFs = sessionPDFs.filter(pdf => pdf.collectionName !== collectionName);
-    sessionCollections.delete(collectionName);
+    // Find and delete from MongoDB
+    const deletedPDF = await PDFMetadata.findOneAndDelete({ collectionName });
+    
+    if (!deletedPDF) {
+      return res.status(404).json({
+        success: false,
+        error: "PDF not found",
+      });
+    }
 
-    // Try to delete the collection from Qdrant
+    // Delete the collection from Qdrant
     try {
       await qdrantClient.deleteCollection(collectionName);
       console.log(`Collection ${collectionName} deleted successfully`);
     } catch (collectionError) {
-      console.error(
-        `Error deleting collection ${collectionName}:`,
-        collectionError
-      );
+      console.error(`Error deleting collection ${collectionName}:`, collectionError);
+    }
+
+    // Delete the physical file
+    try {
+      if (deletedPDF.filePath && fs.existsSync(deletedPDF.filePath)) {
+        fs.unlinkSync(deletedPDF.filePath);
+        console.log(`Deleted file: ${deletedPDF.filePath}`);
+      }
+    } catch (fileError) {
+      console.error(`Error deleting file ${deletedPDF.filePath}:`, fileError);
     }
 
     return res.json({
       success: true,
-      message: `PDF collection ${collectionName} deleted successfully`,
+      message: `PDF ${collectionName} deleted successfully`,
     });
   } catch (error) {
     console.error("Error deleting PDF:", error);
@@ -785,34 +791,6 @@ app.delete("/pdf/:collectionName", async (req: Request, res: Response) => {
   }
 });
 
-// Clear all session data endpoint (optional)
-app.post("/clear-session", async (req: Request, res: Response) => {
-  try {
-    // Clear session data
-    for (const collectionName of sessionCollections) {
-      try {
-        await qdrantClient.deleteCollection(collectionName);
-        console.log(`Deleted collection: ${collectionName}`);
-      } catch (error) {
-        console.error(`Error deleting collection ${collectionName}:`, error);
-      }
-    }
-    
-    sessionPDFs = [];
-    sessionCollections.clear();
-    
-    return res.json({
-      success: true,
-      message: "Session cleared successfully",
-    });
-  } catch (error) {
-    console.error("Error clearing session:", error);
-    return res.status(500).json({
-      success: false,
-      error: "Failed to clear session",
-    });
-  }
-});
 
 const PORT = process.env.PORT || 8000;
 
