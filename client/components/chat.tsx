@@ -20,7 +20,8 @@ interface Doc {
 interface IMessage {
   role: "assistant" | "user";
   content?: string;
-  documents?: Doc[];
+  documents?: any[];
+  timestamp?: string;
 }
 
 interface ChatComponentProps {
@@ -33,8 +34,8 @@ interface ChatComponentProps {
   availablePDFs: Array<{
     collectionName: string;
     originalFilename: string;
-    // add other properties if they exist
   }>;
+  hasPDFs: boolean; // Add this
 }
 
 const ChatComponent = ({
@@ -42,12 +43,14 @@ const ChatComponent = ({
   chatHistory,
   updateChatHistory,
   availablePDFs,
+  hasPDFs,
 }: ChatComponentProps) => {
   const [message, setMessage] = useState<string>("");
   const [loading, setLoading] = useState<boolean>(false);
   const [showAuthPrompt, setShowAuthPrompt] = useState<boolean>(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { isSignedIn } = useAuth();
+  const { getToken, isLoaded: authLoaded } = useAuth();
 
   const formatTime = () => {
     const now = new Date();
@@ -97,6 +100,9 @@ const ChatComponent = ({
     setLoading(true);
 
     try {
+      const token = await getToken();
+      console.log(token);
+
       let url = `http://localhost:8000/chat?message=${encodeURIComponent(
         message
       )}`;
@@ -108,6 +114,7 @@ const ChatComponent = ({
         method: "GET",
         headers: {
           "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
         },
       });
 
@@ -155,23 +162,26 @@ const ChatComponent = ({
   return (
     <div className="flex flex-col h-full">
       {/* Status bar showing which PDF is selected */}
-      {isSignedIn && (
-        <div className="border-b border-gray-800 p-3 text-sm text-gray-400">
-          {selectedPDF ? (
-            <span>
-              Chatting with:{" "}
-              <span className="text-indigo-400 font-medium">
-                {availablePDFs?.find(pdf => pdf.collectionName === selectedPDF)?.originalFilename || 'Selected PDF'}
+      {isSignedIn &&
+        hasPDFs && ( // Only show if signed in AND hasPDFs
+          <div className="border-b border-gray-800 p-3 text-sm text-gray-400">
+            {selectedPDF ? (
+              <span>
+                Chatting with:{" "}
+                <span className="text-indigo-400 font-medium">
+                  {availablePDFs?.find(
+                    (pdf) => pdf.collectionName === selectedPDF
+                  )?.originalFilename || "Selected PDF"}
+                </span>
               </span>
-            </span>
-          ) : (
-            <span>
-              Chatting with:{" "}
-              <span className="text-indigo-400 font-medium">All PDFs</span>
-            </span>
-          )}
-        </div>
-      )}
+            ) : (
+              <span>
+                Chatting with:{" "}
+                <span className="text-indigo-400 font-medium">All PDFs</span>
+              </span>
+            )}
+          </div>
+        )}
 
       {/* Messages area */}
       <div
@@ -188,6 +198,9 @@ const ChatComponent = ({
               msg.role === "user" ? "items-end" : "items-start"
             }`}
           >
+            <div className="text-xs text-gray-400 mb-1">
+              {msg.timestamp || formatTime()}
+            </div>
             <div
               className={`max-w-[80%] p-3 rounded-lg ${
                 msg.role === "user"
@@ -256,9 +269,11 @@ const ChatComponent = ({
             onKeyDown={handleKeyDown}
             onFocus={handleInputFocus}
             placeholder={
-              selectedPDF
-                ? "Ask a question about this PDF..."
-                : "Ask a question about your PDFs..."
+              hasPDFs
+                ? selectedPDF
+                  ? "Ask a question about this PDF..."
+                  : "Ask a question about your PDFs..."
+                : "Upload a PDF to start chatting..."
             }
             className="flex-1 bg-[#0F0F0F] text-white p-3 px-4 focus:outline-none"
           />

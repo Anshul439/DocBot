@@ -24,6 +24,7 @@ export default function Home() {
   });
     const { user, isLoaded: userLoaded } = useUser();
   const { getToken, isLoaded: authLoaded } = useAuth();
+  const [hasPDFs, setHasPDFs] = useState(false);
 
 
   // Listen for PDF upload events
@@ -38,33 +39,65 @@ export default function Home() {
     return () => window.removeEventListener("pdf-uploaded", handlePdfUploaded);
   }, []);
 
-  const fetchAvailablePDFs = async () => {
-    try {
-      const response = await fetch("http://localhost:8000/pdfs");
-      const data = await response.json();
+const fetchAvailablePDFs = async () => {
+  try {
+    const response = await fetch("http://localhost:8000/pdfs");
+    const data = await response.json();
 
-      if (data.success && data.pdfs) {
-        setAvailablePDFs(data.pdfs);
+    if (data.success && data.pdfs) {
+      setAvailablePDFs(data.pdfs);
+      setHasPDFs(data.pdfs.length > 0); // Track if we have any PDFs
 
-        // Only initialize new PDF chat histories without overwriting existing ones
-        setChatHistories((prev) => {
-          const newHistories = { ...prev };
-          data.pdfs.forEach((pdf: any) => {
-            if (!newHistories[pdf.collectionName]) {
-              newHistories[pdf.collectionName] = [];
-            }
-          });
-          return newHistories;
+      // Only initialize new PDF chat histories without overwriting existing ones
+      setChatHistories((prev) => {
+        const newHistories = { ...prev };
+        data.pdfs.forEach((pdf: any) => {
+          if (!newHistories[pdf.collectionName]) {
+            newHistories[pdf.collectionName] = [];
+          }
         });
-      }
-    } catch (error) {
-      console.error("Error fetching PDFs:", error);
+        return newHistories;
+      });
+    } else {
+      setHasPDFs(false);
     }
-  };
+  } catch (error) {
+    console.error("Error fetching PDFs:", error);
+    setHasPDFs(false);
+  }
+};
 
-  const handleSelectPDF = (collectionName: string | null) => {
-    setSelectedPDF(collectionName);
-  };
+  const fetchChatHistory = async (collectionName: string | null) => {
+  try {
+    const token = await getToken();
+    const response = await fetch(`http://localhost:8000/chat/history?collectionName=${collectionName || ''}`, {
+      headers: {
+        Authorization: `Bearer ${token}`
+      }
+    });
+    
+    const data = await response.json();
+    
+    if (data.success) {
+      updateChatHistory(collectionName, data.messages.map((msg: any) => ({
+        role: msg.role,
+        content: msg.content,
+        documents: msg.documents,
+        timestamp: msg.timestamp
+      })));
+    }
+  } catch (error) {
+    console.error("Error fetching chat history:", error);
+  }
+};
+
+// Update your handleSelectPDF function
+const handleSelectPDF = (collectionName: string | null) => {
+  setSelectedPDF(collectionName);
+  if (isSignedIn) {
+    fetchChatHistory(collectionName);
+  }
+};
 
   const updateChatHistory = (
     collectionName: string | null,
@@ -118,16 +151,17 @@ export default function Home() {
 
         {/* Chat Section */}
         <div className="w-full md:w-[70%] overflow-hidden">
-          <ChatComponent
-            selectedPDF={selectedPDF}
-            chatHistory={
-              selectedPDF
-                ? chatHistories[selectedPDF] || []
-                : chatHistories["all"]
-            }
-            updateChatHistory={updateChatHistory}
-            availablePDFs={availablePDFs}
-          />
+         <ChatComponent
+  selectedPDF={selectedPDF}
+  chatHistory={
+    selectedPDF
+      ? chatHistories[selectedPDF] || []
+      : chatHistories["all"]
+  }
+  updateChatHistory={updateChatHistory}
+  availablePDFs={availablePDFs}
+  hasPDFs={hasPDFs} // Add this prop
+/>
         </div>
       </div>
     </div>

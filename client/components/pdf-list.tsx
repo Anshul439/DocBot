@@ -13,29 +13,40 @@ const PDFListComponent = ({
   setSelectedPDF: (collectionName: string | null) => void;
   onRefresh: () => void;
 }) => {
-  const handleDeletePDF = async (collectionName: string, event: React.MouseEvent) => {
-    event.stopPropagation();
+const handleDeletePDF = async (collectionName: string, event: React.MouseEvent) => {
+  event.stopPropagation();
 
-    try {
-      const response = await fetch(
-        `http://localhost:8000/pdf/${collectionName}`,
-        {
-          method: "DELETE",
-        }
-      );
-
-      const data = await response.json();
-
-      if (data.success) {
-        onRefresh();
-        if (selectedPDF === collectionName) {
-          setSelectedPDF(null);
-        }
+  try {
+    const response = await fetch(
+      `http://localhost:8000/pdf/${collectionName}`,
+      {
+        method: "DELETE",
       }
-    } catch (error) {
-      console.error("Error deleting PDF:", error);
+    );
+
+    const data = await response.json();
+
+    if (data.success) {
+      onRefresh(); // This will trigger the parent to refresh the PDF list
+      
+      // Check if this was the last PDF being deleted
+      if (pdfs.length === 1) {
+        // Clear the "all" chat history
+        setSelectedPDF(null);
+        
+        // If you have access to updateChatHistory in this component, add:
+        // updateChatHistory(null, []);
+        // Otherwise, we'll handle this in the parent component
+      }
+      
+      if (selectedPDF === collectionName) {
+        setSelectedPDF(null);
+      }
     }
-  };
+  } catch (error) {
+    console.error("Error deleting PDF:", error);
+  }
+};
 
   if (!pdfs || pdfs.length === 0) {
     return (
