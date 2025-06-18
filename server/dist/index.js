@@ -26,6 +26,7 @@ const js_client_rest_1 = require("@qdrant/js-client-rest");
 const pdf_1 = require("@langchain/community/document_loaders/fs/pdf");
 const textsplitters_1 = require("@langchain/textsplitters");
 const user_route_js_1 = __importDefault(require("./routes/user.route.js"));
+// import { createClient } from "redis";
 const fs_1 = __importDefault(require("fs"));
 const mongoose_1 = __importDefault(require("mongoose"));
 const pdf_model_js_1 = __importDefault(require("./models/pdf.model.js"));
@@ -167,7 +168,12 @@ worker.on("error", (err) => {
     console.error("Worker error:", err);
 });
 worker.on("failed", (job, err) => {
-    console.error(`Job ${job.id} failed:`, err);
+    if (job) {
+        console.error(`Job ${job.id} failed:`, err);
+    }
+    else {
+        console.error("Job failed:", err);
+    }
 });
 worker.on("completed", (job, result) => {
     console.log(`Job ${job.id} completed:`, result);
@@ -196,9 +202,8 @@ app.get("/", (req, res) => {
 // Upload endpoint
 app.post("/upload/pdf", upload.single("pdf"), (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     if (!req.file) {
-        return res
-            .status(400)
-            .json({ success: false, message: "No file uploaded" });
+        res.status(400).json({ success: false, message: "No file uploaded" });
+        return;
     }
     // Add to queue for processing
     const job = yield queue.add("file", JSON.stringify({
@@ -216,14 +221,14 @@ app.post("/upload/pdf", upload.single("pdf"), (req, res) => __awaiter(void 0, vo
 app.get("/pdfs", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const pdfs = yield pdf_model_js_1.default.find().sort({ uploadTime: -1 });
-        return res.json({
+        res.json({
             success: true,
             pdfs: pdfs,
         });
     }
     catch (error) {
         console.error("Error fetching PDFs:", error);
-        return res.status(500).json({
+        res.status(500).json({
             success: false,
             error: "Failed to fetch PDF list",
         });
@@ -286,7 +291,7 @@ function getComprehensiveContent(collectionsToSearch, embeddings) {
                     const scrollResponse = yield qdrantClient.scroll(collection, {
                         limit: 15, // Get more chunks for better summary
                         with_payload: true,
-                        with_vectors: false,
+                        with_vector: false,
                     });
                     console.log(`Retrieved ${scrollResponse.points.length} points from ${collection}`);
                     if (scrollResponse.points.length > 0) {
@@ -368,10 +373,11 @@ app.get("/chat", clerk_middleware_js_1.clerkAuth, (req, res) => __awaiter(void 0
         const collectionName = req.query.collection;
         const userId = req.auth.userId;
         if (!userQuery) {
-            return res.status(400).json({
+            res.status(400).json({
                 error: "Message parameter is required",
                 success: false,
             });
+            return;
         }
         // Save user message to history
         try {
@@ -391,11 +397,12 @@ app.get("/chat", clerk_middleware_js_1.clerkAuth, (req, res) => __awaiter(void 0
         if (collectionName) {
             const pdf = yield pdf_model_js_1.default.findOne({ collectionName });
             if (!pdf) {
-                return res.json({
+                res.json({
                     success: false,
                     error: `The PDF collection "${collectionName}" was not found.`,
                     message: "This PDF may have been deleted or is not accessible.",
                 });
+                return;
             }
             collectionsToSearch = [collectionName];
         }
@@ -403,11 +410,12 @@ app.get("/chat", clerk_middleware_js_1.clerkAuth, (req, res) => __awaiter(void 0
             const allPDFs = yield pdf_model_js_1.default.find();
             collectionsToSearch = allPDFs.map((pdf) => pdf.collectionName);
             if (collectionsToSearch.length === 0) {
-                return res.json({
+                res.json({
                     success: false,
                     error: "No PDFs have been uploaded yet",
                     message: "Please upload a PDF before asking questions.",
                 });
+                return;
             }
         }
         const apiKey = process.env.GOOGLE_API_KEY;
@@ -423,7 +431,7 @@ app.get("/chat", clerk_middleware_js_1.clerkAuth, (req, res) => __awaiter(void 0
             console.log(`Detected summary request`);
             isSummaryResponse = true;
             const comprehensiveContent = yield getComprehensiveContent(collectionsToSearch, embeddings);
-            console.log(comprehensiveContent);
+            // console.log(comprehensiveContent);
             if (comprehensiveContent.length === 0) {
                 responseText =
                     "I couldn't find sufficient content in the uploaded PDFs to create a summary.";
@@ -487,7 +495,7 @@ Please provide a comprehensive summary:`;
                         collectionName: collection,
                     });
                     const docs = yield vectorStore.similaritySearch(userQuery, 4);
-                    console.log("DOCS", docs);
+                    // console.log("DOCS", docs);
                     if (docs.length > 0) {
                         let originalFilename = collection;
                         const pdfMetadata = sessionPDFs.find((pdf) => pdf.collectionName === collection);
@@ -496,7 +504,7 @@ Please provide a comprehensive summary:`;
                         }
                         const docsWithCollection = docs.map((doc) => (Object.assign(Object.assign({}, doc), { metadata: Object.assign(Object.assign({}, doc.metadata), { collectionName: collection, originalFilename: originalFilename }) })));
                         allRelevantDocs.push(...docsWithCollection);
-                        console.log("ARD", allRelevantDocs);
+                        // console.log("ARD", allRelevantDocs);
                         searchResults.push({
                             collection,
                             originalFilename,
@@ -562,7 +570,7 @@ Please provide a detailed answer based on the information in the documents:`;
         catch (error) {
             console.error("Error saving assistant message:", error);
         }
-        return res.json({
+        res.json({
             success: true,
             message: responseText,
             documents: documents,
@@ -572,7 +580,7 @@ Please provide a detailed answer based on the information in the documents:`;
     }
     catch (error) {
         console.error("Error in chat endpoint:", error);
-        return res.status(500).json({
+        res.status(500).json({
             success: false,
             error: "Internal server error",
             message: "Sorry, I encountered an error processing your request.",
@@ -585,13 +593,14 @@ app.get("/job/:id", (req, res) => __awaiter(void 0, void 0, void 0, function* ()
         const jobId = req.params.id;
         const job = yield queue.getJob(jobId);
         if (!job) {
-            return res.status(404).json({
+            res.status(404).json({
                 success: false,
                 error: "Job not found",
             });
+            return;
         }
         const state = yield job.getState();
-        return res.json({
+        res.json({
             success: true,
             jobId,
             state,
@@ -600,7 +609,7 @@ app.get("/job/:id", (req, res) => __awaiter(void 0, void 0, void 0, function* ()
     }
     catch (error) {
         console.error("Error getting job status:", error);
-        return res.status(500).json({
+        res.status(500).json({
             success: false,
             error: "Failed to get job status",
         });
@@ -613,10 +622,11 @@ app.delete("/pdf/:collectionName", (req, res) => __awaiter(void 0, void 0, void 
         // Find and delete from MongoDB
         const deletedPDF = yield pdf_model_js_1.default.findOneAndDelete({ collectionName });
         if (!deletedPDF) {
-            return res.status(404).json({
+            res.status(404).json({
                 success: false,
                 error: "PDF not found",
             });
+            return;
         }
         // Delete the collection from Qdrant
         try {
@@ -656,14 +666,14 @@ app.delete("/pdf/:collectionName", (req, res) => __awaiter(void 0, void 0, void 
         catch (generalChatDeleteError) {
             console.error(`Error deleting general chat history:`, generalChatDeleteError);
         }
-        return res.json({
+        res.json({
             success: true,
             message: `PDF ${collectionName}, its specific chat history, and all general chat history deleted successfully`,
         });
     }
     catch (error) {
         console.error("Error deleting PDF:", error);
-        return res.status(500).json({
+        res.status(500).json({
             success: false,
             error: "Failed to delete PDF and related chat history",
         });
@@ -675,10 +685,11 @@ app.get("/chat/history", clerk_middleware_js_1.clerkAuth, (req, res) => __awaite
         const { collectionName, limit } = req.query;
         const userId = req.auth.userId;
         if (!userId) {
-            return res.status(401).json({
+            res.status(401).json({
                 success: false,
                 error: "Authentication required",
             });
+            return;
         }
         const query = { userId };
         if (collectionName) {
@@ -690,14 +701,14 @@ app.get("/chat/history", clerk_middleware_js_1.clerkAuth, (req, res) => __awaite
         const messages = yield chat_model_1.default.find(query)
             .sort({ timestamp: 1 })
             .limit(parseInt(limit) || 50);
-        return res.json({
+        res.json({
             success: true,
             messages,
         });
     }
     catch (error) {
         console.error("Error fetching chat history:", error);
-        return res.status(500).json({
+        res.status(500).json({
             success: false,
             error: "Failed to fetch chat history",
         });
@@ -709,16 +720,7 @@ mongoose_1.default
     .then(() => console.log("MongoDB connected"))
     .catch((err) => console.error("MongoDB connection error:", err));
 app.use("/api/users", user_route_js_1.default);
-// Clean up old collections on server start
-// cleanupOldCollections().then(() => {
-//   app.listen(PORT, () => {
-//     console.log(`Server started on PORT: ${PORT}`);
-//     console.log("Worker started and listening for jobs...");
-//     console.log("Session-based PDF storage initialized");
-//   });
-// });
 app.listen(PORT, () => {
     console.log(`Server started on PORT: ${PORT}`);
     console.log("Worker started and listening for jobs...");
-    console.log("Session-based PDF storage initialized");
 });

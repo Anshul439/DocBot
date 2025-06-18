@@ -15,10 +15,6 @@ const userSchema = new mongoose_1.default.Schema({
     image: {
         type: [String],
     },
-    createdAt: {
-        type: Date,
-        default: Date.now,
-    },
-});
+}, { timestamps: true });
 const User = mongoose_1.default.model("User", userSchema);
 exports.default = User;

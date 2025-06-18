@@ -24,22 +24,20 @@ const checkUserExists = (req, res, next) => __awaiter(void 0, void 0, void 0, fu
         }
         const user = yield user_model_js_1.default.findOne({ clerkId });
         if (user) {
-            return res.status(200).json({
+            res.status(200).json({
                 success: true,
                 message: "User exists",
                 user: {
                     id: user._id,
                     clerkId: user.clerkId,
                     email: user.email,
-                    firstName: user.firstName,
-                    lastName: user.lastName,
                     createdAt: user.createdAt,
                     updatedAt: user.updatedAt
                 }
             });
         }
         else {
-            return res.status(404).json({
+            res.status(404).json({
                 success: false,
                 message: "User not found"
             });
@@ -66,8 +64,8 @@ const syncClerkUser = (req, res, next) => __awaiter(void 0, void 0, void 0, func
             // Option 2: Update existing user (uncomment if you prefer this)
             /*
             user.email = email;
-            user.firstName = firstName || user.firstName;
-            user.lastName = lastName || user.lastName;
+            if (user.firstName !== undefined) user.firstName = firstName || user.firstName;
+            if (user.lastName !== undefined) user.lastName = lastName || user.lastName;
             await user.save();
             
             return res.status(200).json({
@@ -77,21 +75,25 @@ const syncClerkUser = (req, res, next) => __awaiter(void 0, void 0, void 0, func
                 id: user._id,
                 clerkId: user.clerkId,
                 email: user.email,
-                firstName: user.firstName,
-                lastName: user.lastName,
+                firstName: user.firstName || "",
+                lastName: user.lastName || "",
                 createdAt: user.createdAt,
-                updatedAt: user.updatedAt
+                updatedAt: user.updatedAt || user.createdAt
               }
             });
             */
         }
         // Create new user
-        user = new user_model_js_1.default({
+        const userData = {
             clerkId,
             email,
-            firstName: firstName || "",
-            lastName: lastName || "",
-        });
+        };
+        // Only add firstName/lastName if they exist in the schema
+        if (firstName !== undefined)
+            userData.firstName = firstName || "";
+        if (lastName !== undefined)
+            userData.lastName = lastName || "";
+        user = new user_model_js_1.default(userData);
         yield user.save();
         res.status(201).json({
             success: true,
@@ -100,8 +102,8 @@ const syncClerkUser = (req, res, next) => __awaiter(void 0, void 0, void 0, func
                 id: user._id,
                 clerkId: user.clerkId,
                 email: user.email,
-                firstName: user.firstName,
-                lastName: user.lastName,
+                firstName: user.firstName || "",
+                lastName: user.lastName || "",
                 createdAt: user.createdAt,
                 updatedAt: user.updatedAt
             }
@@ -130,8 +132,8 @@ const getUserByClerkId = (req, res, next) => __awaiter(void 0, void 0, void 0, f
                 id: user._id,
                 clerkId: user.clerkId,
                 email: user.email,
-                firstName: user.firstName,
-                lastName: user.lastName,
+                firstName: user.firstName || "",
+                lastName: user.lastName || "",
                 createdAt: user.createdAt,
                 updatedAt: user.updatedAt
             }

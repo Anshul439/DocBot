@@ -13,14 +13,43 @@ import { QdrantClient } from "@qdrant/js-client-rest";
 import { PDFLoader } from "@langchain/community/document_loaders/fs/pdf";
 import { CharacterTextSplitter } from "@langchain/textsplitters";
 import userRoutes from "./routes/user.route.js";
-import { createClient } from "redis";
+// import { createClient } from "redis";
 import fs from "fs";
 import mongoose from "mongoose";
 import PDFMetadata from "./models/pdf.model.js";
 import ChatMessage from "./models/chat.model";
 import { clerkAuth } from "./middlewares/clerk.middleware.js";
 
-const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY);
+interface PDFData {
+  filename: string;
+  originalFilename: string;
+  collectionName: string;
+  uploadTime: Date;
+  chunks: number;
+  filePath: string;
+}
+
+interface ComprehensiveContent {
+  filename: string;
+  collectionName: string;
+  content: string;
+  chunkCount: number;
+  totalChunks: number;
+}
+
+interface DocumentResult {
+  pageContent: string;
+  metadata: {
+    source?: string;
+    collectionName?: string;
+    originalFilename?: string;
+    chunkCount?: number;
+    totalChunks?: number;
+    type?: string;
+  };
+}
+
+const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY as string);
 
 // Initialize Qdrant client
 const qdrantClient = new QdrantClient({
@@ -29,7 +58,7 @@ const qdrantClient = new QdrantClient({
 });
 
 // In-memory storage for current session PDFs
-let sessionPDFs: any[] = [];
+let sessionPDFs: PDFData[] = [];
 let sessionCollections: Set<string> = new Set();
 
 const queue = new Queue("file-upload-queue", {
@@ -127,7 +156,7 @@ const worker = new Worker(
       // Check if collection exists, if not create it
       const collections = await qdrantClient.getCollections();
       const collectionExists = collections.collections.some(
-        (collection) => collection.name === collectionName
+        (collection: any) => collection.name === collectionName
       );
 
       if (!collectionExists) {
@@ -193,7 +222,11 @@ worker.on("error", (err) => {
 });
 
 worker.on("failed", (job, err) => {
-  console.error(`Job ${job.id} failed:`, err);
+  if (job) {
+    console.error(`Job ${job.id} failed:`, err);
+  } else {
+    console.error("Job failed:", err);
+  }
 });
 
 worker.on("completed", (job, result) => {
@@ -229,11 +262,10 @@ app.get("/", (req: Request, res: Response) => {
 app.post(
   "/upload/pdf",
   upload.single("pdf"),
-  async (req: Request, res: Response) => {
+  async (req: Request, res: Response): Promise<void> => {
     if (!req.file) {
-      return res
-        .status(400)
-        .json({ success: false, message: "No file uploaded" });
+      res.status(400).json({ success: false, message: "No file uploaded" });
+      return;
     }
 
     // Add to queue for processing
@@ -255,16 +287,16 @@ app.post(
 );
 
 // Get all available PDFs (now returns session PDFs only)
-app.get("/pdfs", async (req: Request, res: Response) => {
+app.get("/pdfs", async (req: Request, res: Response): Promise<void> => {
   try {
     const pdfs = await PDFMetadata.find().sort({ uploadTime: -1 });
-    return res.json({
+    res.json({
       success: true,
       pdfs: pdfs,
     });
   } catch (error) {
     console.error("Error fetching PDFs:", error);
-    return res.status(500).json({
+    res.status(500).json({
       success: false,
       error: "Failed to fetch PDF list",
     });
@@ -297,8 +329,11 @@ function isSummaryRequest(query: string): boolean {
 }
 
 // Fixed helper function to get comprehensive content for summaries
-async function getComprehensiveContent(collectionsToSearch, embeddings) {
-  const allContent = [];
+async function getComprehensiveContent(
+  collectionsToSearch: string[],
+  embeddings: GoogleGenerativeAIEmbeddings
+): Promise<ComprehensiveContent[]> {
+  const allContent: ComprehensiveContent[] = [];
 
   console.log(
     `Attempting to get content from ${collectionsToSearch.length} collections`
@@ -347,7 +382,7 @@ async function getComprehensiveContent(collectionsToSearch, embeddings) {
         const scrollResponse = await qdrantClient.scroll(collection, {
           limit: 15, // Get more chunks for better summary
           with_payload: true,
-          with_vectors: false,
+          with_vector: false,
         });
 
         console.log(
@@ -356,13 +391,13 @@ async function getComprehensiveContent(collectionsToSearch, embeddings) {
 
         if (scrollResponse.points.length > 0) {
           const contentChunks = scrollResponse.points
-            .map((point) => {
+            .map((point: any) => {
               // Handle different payload structures
               const content =
                 point.payload?.pageContent || point.payload?.content || "";
               return content;
             })
-            .filter((content) => content && content.trim().length > 20) // More lenient filter
+            .filter((content: string) => content && content.trim().length > 20) // More lenient filter
             .slice(0, 10); // Take first 10 substantial chunks
 
           console.log(
@@ -449,104 +484,110 @@ async function getComprehensiveContent(collectionsToSearch, embeddings) {
 }
 
 // Enhanced chat endpoint with complete functionality
-app.get("/chat", clerkAuth, async (req, res) => {
-  try {
-    const userQuery = req.query.message;
-    const collectionName = req.query.collection;
-    const userId = req.auth.userId;
-
-    if (!userQuery) {
-      return res.status(400).json({
-        error: "Message parameter is required",
-        success: false,
-      });
-    }
-
-    // Save user message to history
+app.get(
+  "/chat",
+  clerkAuth,
+  async (req: Request, res: Response): Promise<void> => {
     try {
-      await ChatMessage.create({
-        userId: userId,
-        collectionName: collectionName || null,
-        role: "user",
-        content: userQuery,
-        timestamp: new Date(),
-      });
-    } catch (error) {
-      console.error("Error saving user message:", error);
-    }
+      const userQuery = req.query.message as string;
+      const collectionName = req.query.collection as string;
+      const userId = (req as any).auth.userId;
 
-    console.log(
-      `Processing query: "${userQuery}" for collection: ${
-        collectionName || "all"
-      }`
-    );
-
-    let collectionsToSearch = [];
-    if (collectionName) {
-      const pdf = await PDFMetadata.findOne({ collectionName });
-      if (!pdf) {
-        return res.json({
+      if (!userQuery) {
+        res.status(400).json({
+          error: "Message parameter is required",
           success: false,
-          error: `The PDF collection "${collectionName}" was not found.`,
-          message: "This PDF may have been deleted or is not accessible.",
         });
+        return;
       }
-      collectionsToSearch = [collectionName];
-    } else {
-      const allPDFs = await PDFMetadata.find();
-      collectionsToSearch = allPDFs.map((pdf) => pdf.collectionName);
 
-      if (collectionsToSearch.length === 0) {
-        return res.json({
-          success: false,
-          error: "No PDFs have been uploaded yet",
-          message: "Please upload a PDF before asking questions.",
+      // Save user message to history
+      try {
+        await ChatMessage.create({
+          userId: userId,
+          collectionName: collectionName || null,
+          role: "user",
+          content: userQuery,
+          timestamp: new Date(),
         });
+      } catch (error) {
+        console.error("Error saving user message:", error);
       }
-    }
 
-    const apiKey = process.env.GOOGLE_API_KEY;
-    const embeddings = new GoogleGenerativeAIEmbeddings({
-      apiKey,
-      modelName: "models/embedding-001",
-    });
-
-    const isSummary = isSummaryRequest(userQuery);
-    let responseText = "";
-    let documents = [];
-    let isSummaryResponse = false;
-
-    if (isSummary) {
-      console.log(`Detected summary request`);
-      isSummaryResponse = true;
-
-      const comprehensiveContent = await getComprehensiveContent(
-        collectionsToSearch,
-        embeddings
+      console.log(
+        `Processing query: "${userQuery}" for collection: ${
+          collectionName || "all"
+        }`
       );
-      console.log(comprehensiveContent);
 
-      if (comprehensiveContent.length === 0) {
-        responseText =
-          "I couldn't find sufficient content in the uploaded PDFs to create a summary.";
-        documents = [];
+      let collectionsToSearch: string[] = [];
+      if (collectionName) {
+        const pdf = await PDFMetadata.findOne({ collectionName });
+        if (!pdf) {
+          res.json({
+            success: false,
+            error: `The PDF collection "${collectionName}" was not found.`,
+            message: "This PDF may have been deleted or is not accessible.",
+          });
+          return;
+        }
+        collectionsToSearch = [collectionName];
       } else {
-        const summaryContext = comprehensiveContent
-          .map(
-            (pdf) => `
+        const allPDFs = await PDFMetadata.find();
+        collectionsToSearch = allPDFs.map((pdf) => pdf.collectionName);
+
+        if (collectionsToSearch.length === 0) {
+          res.json({
+            success: false,
+            error: "No PDFs have been uploaded yet",
+            message: "Please upload a PDF before asking questions.",
+          });
+          return;
+        }
+      }
+
+      const apiKey = process.env.GOOGLE_API_KEY as string;
+      const embeddings = new GoogleGenerativeAIEmbeddings({
+        apiKey,
+        modelName: "models/embedding-001",
+      });
+
+      const isSummary = isSummaryRequest(userQuery);
+      let responseText = "";
+      let documents: DocumentResult[] = [];
+      let isSummaryResponse = false;
+
+      if (isSummary) {
+        console.log(`Detected summary request`);
+        isSummaryResponse = true;
+
+        const comprehensiveContent = await getComprehensiveContent(
+          collectionsToSearch,
+          embeddings
+        );
+        // console.log(comprehensiveContent);
+
+        if (comprehensiveContent.length === 0) {
+          responseText =
+            "I couldn't find sufficient content in the uploaded PDFs to create a summary.";
+          documents = [];
+        } else {
+          const summaryContext = comprehensiveContent
+            .map(
+              (pdf) => `
 === ${pdf.filename} ===
 Chunks: ${pdf.chunkCount}/${pdf.totalChunks}
 Content:
 ${pdf.content}
         `
-          )
-          .join("\n\n");
+            )
+            .join("\n\n");
 
-        const SUMMARY_PROMPT = `
+          const SUMMARY_PROMPT = `
 You are an AI assistant that creates comprehensive summaries of PDF documents.
 Based on the provided content from ${
-          comprehensiveContent.length
-        } PDF document(s), create a detailed summary.
+            comprehensiveContent.length
+          } PDF document(s), create a detailed summary.
 
 ${
   comprehensiveContent.length > 1
@@ -569,85 +610,90 @@ USER REQUEST: ${userQuery}
 
 Please provide a comprehensive summary:`;
 
-        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-        const geminiResponse = await model.generateContent(SUMMARY_PROMPT);
-        responseText = geminiResponse.response.text();
+          const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+          const geminiResponse = await model.generateContent(SUMMARY_PROMPT);
+          responseText = geminiResponse.response.text();
 
-        documents = comprehensiveContent.map((pdf) => ({
-          pageContent: pdf.content.substring(0, 500) + "...",
-          metadata: {
-            source: pdf.filename,
-            collectionName: pdf.collectionName,
-            chunkCount: pdf.chunkCount,
-            totalChunks: pdf.totalChunks,
-            type: "summary_content",
-          },
-        }));
-      }
-    } else {
-      // Regular question answering
-      let allRelevantDocs = [];
-      let searchResults = [];
-
-      for (const collection of collectionsToSearch) {
-        try {
-          const vectorStore = await QdrantVectorStore.fromExistingCollection(
-            embeddings,
-            {
-              url: process.env.QDRANT_URL,
-              apiKey: process.env.QDRANT_API_KEY,
-              collectionName: collection,
-            }
-          );
-
-          const docs = await vectorStore.similaritySearch(userQuery, 4);
-          console.log("DOCS", docs);
-
-          if (docs.length > 0) {
-            let originalFilename = collection;
-            const pdfMetadata = sessionPDFs.find(
-              (pdf) => pdf.collectionName === collection
-            );
-            if (pdfMetadata) {
-              originalFilename = pdfMetadata.originalFilename;
-            }
-
-            const docsWithCollection = docs.map((doc) => ({
-              ...doc,
-              metadata: {
-                ...doc.metadata,
-                collectionName: collection,
-                originalFilename: originalFilename,
-              },
-            }));
-
-            allRelevantDocs.push(...docsWithCollection);
-            console.log("ARD", allRelevantDocs);
-
-            searchResults.push({
-              collection,
-              originalFilename,
-              docCount: docs.length,
-            });
-          }
-        } catch (error) {
-          console.error(`Error searching in collection ${collection}:`, error);
+          documents = comprehensiveContent.map((pdf) => ({
+            pageContent: pdf.content.substring(0, 500) + "...",
+            metadata: {
+              source: pdf.filename,
+              collectionName: pdf.collectionName,
+              chunkCount: pdf.chunkCount,
+              totalChunks: pdf.totalChunks,
+              type: "summary_content",
+            },
+          }));
         }
-      }
-
-      if (allRelevantDocs.length === 0) {
-        responseText =
-          "I couldn't find any relevant information in the uploaded PDFs to answer your question.";
-        documents = [];
       } else {
-        const context = allRelevantDocs
-          .map((doc, index) => {
-            const filename = doc.metadata.originalFilename || "Unknown PDF";
-            return `[Document ${index + 1} - ${filename}]\n${doc.pageContent}`;
-          })
-          .join("\n\n");
+        // Regular question answering
+        let allRelevantDocs: any[] = [];
+        let searchResults: any[] = [];
 
-        const QA_PROMPT = `
+        for (const collection of collectionsToSearch) {
+          try {
+            const vectorStore = await QdrantVectorStore.fromExistingCollection(
+              embeddings,
+              {
+                url: process.env.QDRANT_URL,
+                apiKey: process.env.QDRANT_API_KEY,
+                collectionName: collection,
+              }
+            );
+
+            const docs = await vectorStore.similaritySearch(userQuery, 4);
+            // console.log("DOCS", docs);
+
+            if (docs.length > 0) {
+              let originalFilename = collection;
+              const pdfMetadata = sessionPDFs.find(
+                (pdf) => pdf.collectionName === collection
+              );
+              if (pdfMetadata) {
+                originalFilename = pdfMetadata.originalFilename;
+              }
+
+              const docsWithCollection = docs.map((doc) => ({
+                ...doc,
+                metadata: {
+                  ...doc.metadata,
+                  collectionName: collection,
+                  originalFilename: originalFilename,
+                },
+              }));
+
+              allRelevantDocs.push(...docsWithCollection);
+              // console.log("ARD", allRelevantDocs);
+
+              searchResults.push({
+                collection,
+                originalFilename,
+                docCount: docs.length,
+              });
+            }
+          } catch (error) {
+            console.error(
+              `Error searching in collection ${collection}:`,
+              error
+            );
+          }
+        }
+
+        if (allRelevantDocs.length === 0) {
+          responseText =
+            "I couldn't find any relevant information in the uploaded PDFs to answer your question.";
+          documents = [];
+        } else {
+          const context = allRelevantDocs
+            .map((doc, index) => {
+              const filename = doc.metadata.originalFilename || "Unknown PDF";
+              return `[Document ${index + 1} - ${filename}]\n${
+                doc.pageContent
+              }`;
+            })
+            .join("\n\n");
+
+          const QA_PROMPT = `
 You are an AI assistant that answers questions based on PDF documents. 
 Use the provided context from PDF documents to answer the user's question accurately and comprehensively.
 
@@ -666,64 +712,66 @@ USER QUESTION: ${userQuery}
 
 Please provide a detailed answer based on the information in the documents:`;
 
-        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-        const geminiResponse = await model.generateContent(QA_PROMPT);
-        responseText = geminiResponse.response.text();
-        documents = allRelevantDocs.map((doc) => ({
-          pageContent: doc.pageContent,
-          metadata: doc.metadata,
-        }));
+          const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+          const geminiResponse = await model.generateContent(QA_PROMPT);
+          responseText = geminiResponse.response.text();
+          documents = allRelevantDocs.map((doc) => ({
+            pageContent: doc.pageContent,
+            metadata: doc.metadata,
+          }));
+        }
       }
-    }
 
-    // Save assistant response to history
-    try {
-      await ChatMessage.create({
-        userId: userId,
-        collectionName: collectionName || null,
-        role: "assistant",
-        content: responseText,
+      // Save assistant response to history
+      try {
+        await ChatMessage.create({
+          userId: userId,
+          collectionName: collectionName || null,
+          role: "assistant",
+          content: responseText,
+          documents: documents,
+          isSummary: isSummaryResponse,
+          timestamp: new Date(),
+        });
+      } catch (error) {
+        console.error("Error saving assistant message:", error);
+      }
+
+      res.json({
+        success: true,
+        message: responseText,
         documents: documents,
+        query: userQuery,
         isSummary: isSummaryResponse,
-        timestamp: new Date(),
       });
     } catch (error) {
-      console.error("Error saving assistant message:", error);
+      console.error("Error in chat endpoint:", error);
+      res.status(500).json({
+        success: false,
+        error: "Internal server error",
+        message: "Sorry, I encountered an error processing your request.",
+      });
     }
-
-    return res.json({
-      success: true,
-      message: responseText,
-      documents: documents,
-      query: userQuery,
-      isSummary: isSummaryResponse,
-    });
-  } catch (error) {
-    console.error("Error in chat endpoint:", error);
-    return res.status(500).json({
-      success: false,
-      error: "Internal server error",
-      message: "Sorry, I encountered an error processing your request.",
-    });
   }
-});
+);
 
 // Get job status endpoint
-app.get("/job/:id", async (req: Request, res: Response) => {
+app.get("/job/:id", async (req: Request, res: Response): Promise<void> => {
   try {
     const jobId = req.params.id;
     const job = await queue.getJob(jobId);
 
     if (!job) {
-      return res.status(404).json({
+      res.status(404).json({
         success: false,
         error: "Job not found",
       });
+      return;
     }
 
     const state = await job.getState();
 
-    return res.json({
+    res.json({
       success: true,
       jobId,
       state,
@@ -731,7 +779,7 @@ app.get("/job/:id", async (req: Request, res: Response) => {
     });
   } catch (error) {
     console.error("Error getting job status:", error);
-    return res.status(500).json({
+    res.status(500).json({
       success: false,
       error: "Failed to get job status",
     });
@@ -739,120 +787,129 @@ app.get("/job/:id", async (req: Request, res: Response) => {
 });
 
 // Delete PDF endpoint
-app.delete("/pdf/:collectionName", async (req: Request, res: Response) => {
-  try {
-    const { collectionName } = req.params;
-
-    // Find and delete from MongoDB
-    const deletedPDF = await PDFMetadata.findOneAndDelete({ collectionName });
-
-    if (!deletedPDF) {
-      return res.status(404).json({
-        success: false,
-        error: "PDF not found",
-      });
-    }
-
-    // Delete the collection from Qdrant
+app.delete(
+  "/pdf/:collectionName",
+  async (req: Request, res: Response): Promise<void> => {
     try {
-      await qdrantClient.deleteCollection(collectionName);
-      console.log(`Collection ${collectionName} deleted successfully`);
-    } catch (collectionError) {
-      console.error(
-        `Error deleting collection ${collectionName}:`,
-        collectionError
-      );
-    }
+      const { collectionName } = req.params;
 
-    // Delete the physical file
-    try {
-      if (deletedPDF.filePath && fs.existsSync(deletedPDF.filePath)) {
-        fs.unlinkSync(deletedPDF.filePath);
-        console.log(`Deleted file: ${deletedPDF.filePath}`);
+      // Find and delete from MongoDB
+      const deletedPDF = await PDFMetadata.findOneAndDelete({ collectionName });
+
+      if (!deletedPDF) {
+        res.status(404).json({
+          success: false,
+          error: "PDF not found",
+        });
+        return;
       }
-    } catch (fileError) {
-      console.error(`Error deleting file ${deletedPDF.filePath}:`, fileError);
-    }
 
-    // Delete all chat history associated with this specific collection
-    try {
-      const specificDeleteResult = await ChatMessage.deleteMany({
-        collectionName: collectionName,
+      // Delete the collection from Qdrant
+      try {
+        await qdrantClient.deleteCollection(collectionName);
+        console.log(`Collection ${collectionName} deleted successfully`);
+      } catch (collectionError) {
+        console.error(
+          `Error deleting collection ${collectionName}:`,
+          collectionError
+        );
+      }
+
+      // Delete the physical file
+      try {
+        if (deletedPDF.filePath && fs.existsSync(deletedPDF.filePath)) {
+          fs.unlinkSync(deletedPDF.filePath);
+          console.log(`Deleted file: ${deletedPDF.filePath}`);
+        }
+      } catch (fileError) {
+        console.error(`Error deleting file ${deletedPDF.filePath}:`, fileError);
+      }
+
+      // Delete all chat history associated with this specific collection
+      try {
+        const specificDeleteResult = await ChatMessage.deleteMany({
+          collectionName: collectionName,
+        });
+        console.log(
+          `Deleted ${specificDeleteResult.deletedCount} specific chat messages for collection ${collectionName}`
+        );
+      } catch (specificChatDeleteError) {
+        console.error(
+          `Error deleting specific chat history for collection ${collectionName}:`,
+          specificChatDeleteError
+        );
+      }
+
+      // Delete all general chat history (where collectionName is null)
+      try {
+        const generalDeleteResult = await ChatMessage.deleteMany({
+          collectionName: null,
+        });
+        console.log(
+          `Deleted ${generalDeleteResult.deletedCount} general chat messages`
+        );
+      } catch (generalChatDeleteError) {
+        console.error(
+          `Error deleting general chat history:`,
+          generalChatDeleteError
+        );
+      }
+
+      res.json({
+        success: true,
+        message: `PDF ${collectionName}, its specific chat history, and all general chat history deleted successfully`,
       });
-      console.log(
-        `Deleted ${specificDeleteResult.deletedCount} specific chat messages for collection ${collectionName}`
-      );
-    } catch (specificChatDeleteError) {
-      console.error(
-        `Error deleting specific chat history for collection ${collectionName}:`,
-        specificChatDeleteError
-      );
-    }
-
-    // Delete all general chat history (where collectionName is null)
-    try {
-      const generalDeleteResult = await ChatMessage.deleteMany({
-        collectionName: null,
+    } catch (error) {
+      console.error("Error deleting PDF:", error);
+      res.status(500).json({
+        success: false,
+        error: "Failed to delete PDF and related chat history",
       });
-      console.log(
-        `Deleted ${generalDeleteResult.deletedCount} general chat messages`
-      );
-    } catch (generalChatDeleteError) {
-      console.error(
-        `Error deleting general chat history:`,
-        generalChatDeleteError
-      );
     }
-
-    return res.json({
-      success: true,
-      message: `PDF ${collectionName}, its specific chat history, and all general chat history deleted successfully`,
-    });
-  } catch (error) {
-    console.error("Error deleting PDF:", error);
-    return res.status(500).json({
-      success: false,
-      error: "Failed to delete PDF and related chat history",
-    });
   }
-});
+);
 
 // Get chat history endpoint
-app.get("/chat/history", clerkAuth, async (req: Request, res: Response) => {
-  try {
-    const { collectionName, limit } = req.query;
-    const userId = req.auth.userId;
+app.get(
+  "/chat/history",
+  clerkAuth,
+  async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { collectionName, limit } = req.query;
+      const userId = (req as any).auth.userId;
 
-    if (!userId) {
-      return res.status(401).json({
+      if (!userId) {
+        res.status(401).json({
+          success: false,
+          error: "Authentication required",
+        });
+        return;
+      }
+
+      const query: any = { userId };
+      if (collectionName) {
+        query.collectionName = collectionName;
+      } else {
+        query.collectionName = null; // For "all PDFs" chat
+      }
+
+      const messages = await ChatMessage.find(query)
+        .sort({ timestamp: 1 })
+        .limit(parseInt(limit as string) || 50);
+
+      res.json({
+        success: true,
+        messages,
+      });
+    } catch (error) {
+      console.error("Error fetching chat history:", error);
+      res.status(500).json({
         success: false,
-        error: "Authentication required",
+        error: "Failed to fetch chat history",
       });
     }
-
-    const query: any = { userId };
-    if (collectionName) {
-      query.collectionName = collectionName;
-    } else {
-      query.collectionName = null; // For "all PDFs" chat
-    }
-
-    const messages = await ChatMessage.find(query)
-      .sort({ timestamp: 1 })
-      .limit(parseInt(limit as string) || 50);
-
-    return res.json({
-      success: true,
-      messages,
-    });
-  } catch (error) {
-    console.error("Error fetching chat history:", error);
-    return res.status(500).json({
-      success: false,
-      error: "Failed to fetch chat history",
-    });
   }
-});
+);
 
 const PORT = process.env.PORT || 8000;
 
@@ -863,17 +920,7 @@ mongoose
 
 app.use("/api/users", userRoutes);
 
-// Clean up old collections on server start
-// cleanupOldCollections().then(() => {
-//   app.listen(PORT, () => {
-//     console.log(`Server started on PORT: ${PORT}`);
-//     console.log("Worker started and listening for jobs...");
-//     console.log("Session-based PDF storage initialized");
-//   });
-// });
-
 app.listen(PORT, () => {
   console.log(`Server started on PORT: ${PORT}`);
   console.log("Worker started and listening for jobs...");
-  console.log("Session-based PDF storage initialized");
 });

@@ -3,11 +3,7 @@ import User from "../models/user.model.js";
 import { errorHandler } from "../utils/error.js";
 
 // Check if user exists by Clerk ID
-export const checkUserExists = async (
-  req: Request,
-  res: Response,
-  next: NextFunction
-) => {
+export const checkUserExists = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     const { clerkId } = req.params;
 
@@ -18,21 +14,19 @@ export const checkUserExists = async (
     const user = await User.findOne({ clerkId });
 
     if (user) {
-      return res.status(200).json({
+      res.status(200).json({
         success: true,
         message: "User exists",
         user: {
           id: user._id,
           clerkId: user.clerkId,
           email: user.email,
-          firstName: user.firstName,
-          lastName: user.lastName,
           createdAt: user.createdAt,
           updatedAt: user.updatedAt
         }
       });
     } else {
-      return res.status(404).json({
+      res.status(404).json({
         success: false,
         message: "User not found"
       });
@@ -66,8 +60,8 @@ export const syncClerkUser = async (
       // Option 2: Update existing user (uncomment if you prefer this)
       /*
       user.email = email;
-      user.firstName = firstName || user.firstName;
-      user.lastName = lastName || user.lastName;
+      if (user.firstName !== undefined) user.firstName = firstName || user.firstName;
+      if (user.lastName !== undefined) user.lastName = lastName || user.lastName;
       await user.save();
       
       return res.status(200).json({
@@ -77,22 +71,26 @@ export const syncClerkUser = async (
           id: user._id,
           clerkId: user.clerkId,
           email: user.email,
-          firstName: user.firstName,
-          lastName: user.lastName,
+          firstName: user.firstName || "",
+          lastName: user.lastName || "",
           createdAt: user.createdAt,
-          updatedAt: user.updatedAt
+          updatedAt: user.updatedAt || user.createdAt
         }
       });
       */
     }
 
     // Create new user
-    user = new User({
+    const userData: any = {
       clerkId,
       email,
-      firstName: firstName || "",
-      lastName: lastName || "",
-    });
+    };
+
+    // Only add firstName/lastName if they exist in the schema
+    if (firstName !== undefined) userData.firstName = firstName || "";
+    if (lastName !== undefined) userData.lastName = lastName || "";
+
+    user = new User(userData);
 
     await user.save();
     
@@ -103,10 +101,10 @@ export const syncClerkUser = async (
         id: user._id,
         clerkId: user.clerkId,
         email: user.email,
-        firstName: user.firstName,
-        lastName: user.lastName,
+        firstName: (user as any).firstName || "",
+        lastName: (user as any).lastName || "",
         createdAt: user.createdAt,
-        updatedAt: user.updatedAt
+        updatedAt: (user as any).updatedAt
       }
     });
   } catch (error) {
@@ -140,10 +138,10 @@ export const getUserByClerkId = async (
         id: user._id,
         clerkId: user.clerkId,
         email: user.email,
-        firstName: user.firstName,
-        lastName: user.lastName,
+        firstName: (user as any).firstName || "",
+        lastName: (user as any).lastName || "",
         createdAt: user.createdAt,
-        updatedAt: user.updatedAt
+        updatedAt: (user as any).updatedAt
       }
     });
   } catch (error) {
