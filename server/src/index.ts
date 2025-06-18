@@ -42,44 +42,44 @@ const queue = new Queue("file-upload-queue", {
 });
 
 // Function to clean up old collections on server start
-const cleanupOldCollections = async () => {
-  try {
-    console.log("Cleaning up old PDF collections...");
-    const collections = await qdrantClient.getCollections();
+// const cleanupOldCollections = async () => {
+//   try {
+//     console.log("Cleaning up old PDF collections...");
+//     const collections = await qdrantClient.getCollections();
 
-    for (const collection of collections.collections) {
-      if (
-        collection.name.startsWith("pdf_") ||
-        collection.name === "pdf_metadata"
-      ) {
-        try {
-          await qdrantClient.deleteCollection(collection.name);
-          console.log(`Deleted old collection: ${collection.name}`);
-        } catch (error) {
-          console.error(`Error deleting collection ${collection.name}:`, error);
-        }
-      }
-    }
+//     for (const collection of collections.collections) {
+//       if (
+//         collection.name.startsWith("pdf_") ||
+//         collection.name === "pdf_metadata"
+//       ) {
+//         try {
+//           await qdrantClient.deleteCollection(collection.name);
+//           console.log(`Deleted old collection: ${collection.name}`);
+//         } catch (error) {
+//           console.error(`Error deleting collection ${collection.name}:`, error);
+//         }
+//       }
+//     }
 
-    // Clean up uploads directory
-    const uploadsDir = "uploads/";
-    if (fs.existsSync(uploadsDir)) {
-      const files = fs.readdirSync(uploadsDir);
-      for (const file of files) {
-        try {
-          fs.unlinkSync(path.join(uploadsDir, file));
-          console.log(`Deleted old file: ${file}`);
-        } catch (error) {
-          console.error(`Error deleting file ${file}:`, error);
-        }
-      }
-    }
+//     // Clean up uploads directory
+//     const uploadsDir = "uploads/";
+//     if (fs.existsSync(uploadsDir)) {
+//       const files = fs.readdirSync(uploadsDir);
+//       for (const file of files) {
+//         try {
+//           fs.unlinkSync(path.join(uploadsDir, file));
+//           console.log(`Deleted old file: ${file}`);
+//         } catch (error) {
+//           console.error(`Error deleting file ${file}:`, error);
+//         }
+//       }
+//     }
 
-    console.log("Cleanup completed");
-  } catch (error) {
-    console.error("Error during cleanup:", error);
-  }
-};
+//     console.log("Cleanup completed");
+//   } catch (error) {
+//     console.error("Error during cleanup:", error);
+//   }
+// };
 
 // Initialize the worker within the same process
 const worker = new Worker(
@@ -519,14 +519,16 @@ app.get("/chat", clerkAuth, async (req, res) => {
     if (isSummary) {
       console.log(`Detected summary request`);
       isSummaryResponse = true;
-      
+
       const comprehensiveContent = await getComprehensiveContent(
         collectionsToSearch,
         embeddings
       );
+      console.log(comprehensiveContent);
 
       if (comprehensiveContent.length === 0) {
-        responseText = "I couldn't find sufficient content in the uploaded PDFs to create a summary.";
+        responseText =
+          "I couldn't find sufficient content in the uploaded PDFs to create a summary.";
         documents = [];
       } else {
         const summaryContext = comprehensiveContent
@@ -599,6 +601,8 @@ Please provide a comprehensive summary:`;
           );
 
           const docs = await vectorStore.similaritySearch(userQuery, 4);
+          console.log("DOCS", docs);
+
           if (docs.length > 0) {
             let originalFilename = collection;
             const pdfMetadata = sessionPDFs.find(
@@ -618,6 +622,8 @@ Please provide a comprehensive summary:`;
             }));
 
             allRelevantDocs.push(...docsWithCollection);
+            console.log("ARD", allRelevantDocs);
+
             searchResults.push({
               collection,
               originalFilename,
@@ -630,7 +636,8 @@ Please provide a comprehensive summary:`;
       }
 
       if (allRelevantDocs.length === 0) {
-        responseText = "I couldn't find any relevant information in the uploaded PDFs to answer your question.";
+        responseText =
+          "I couldn't find any relevant information in the uploaded PDFs to answer your question.";
         documents = [];
       } else {
         const context = allRelevantDocs
@@ -811,10 +818,10 @@ app.delete("/pdf/:collectionName", async (req: Request, res: Response) => {
 });
 
 // Get chat history endpoint
-app.get("/chat/history",clerkAuth, async (req: Request, res: Response) => {
+app.get("/chat/history", clerkAuth, async (req: Request, res: Response) => {
   try {
     const { collectionName, limit } = req.query;
-     const userId = req.auth.userId;
+    const userId = req.auth.userId;
 
     if (!userId) {
       return res.status(401).json({
@@ -857,10 +864,16 @@ mongoose
 app.use("/api/users", userRoutes);
 
 // Clean up old collections on server start
-cleanupOldCollections().then(() => {
-  app.listen(PORT, () => {
-    console.log(`Server started on PORT: ${PORT}`);
-    console.log("Worker started and listening for jobs...");
-    console.log("Session-based PDF storage initialized");
-  });
+// cleanupOldCollections().then(() => {
+//   app.listen(PORT, () => {
+//     console.log(`Server started on PORT: ${PORT}`);
+//     console.log("Worker started and listening for jobs...");
+//     console.log("Session-based PDF storage initialized");
+//   });
+// });
+
+app.listen(PORT, () => {
+  console.log(`Server started on PORT: ${PORT}`);
+  console.log("Worker started and listening for jobs...");
+  console.log("Session-based PDF storage initialized");
 });

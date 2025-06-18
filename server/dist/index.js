@@ -49,42 +49,41 @@ const queue = new bullmq_1.Queue("file-upload-queue", {
     },
 });
 // Function to clean up old collections on server start
-const cleanupOldCollections = () => __awaiter(void 0, void 0, void 0, function* () {
-    try {
-        console.log("Cleaning up old PDF collections...");
-        const collections = yield qdrantClient.getCollections();
-        for (const collection of collections.collections) {
-            if (collection.name.startsWith("pdf_") ||
-                collection.name === "pdf_metadata") {
-                try {
-                    yield qdrantClient.deleteCollection(collection.name);
-                    console.log(`Deleted old collection: ${collection.name}`);
-                }
-                catch (error) {
-                    console.error(`Error deleting collection ${collection.name}:`, error);
-                }
-            }
-        }
-        // Clean up uploads directory
-        const uploadsDir = "uploads/";
-        if (fs_1.default.existsSync(uploadsDir)) {
-            const files = fs_1.default.readdirSync(uploadsDir);
-            for (const file of files) {
-                try {
-                    fs_1.default.unlinkSync(path_1.default.join(uploadsDir, file));
-                    console.log(`Deleted old file: ${file}`);
-                }
-                catch (error) {
-                    console.error(`Error deleting file ${file}:`, error);
-                }
-            }
-        }
-        console.log("Cleanup completed");
-    }
-    catch (error) {
-        console.error("Error during cleanup:", error);
-    }
-});
+// const cleanupOldCollections = async () => {
+//   try {
+//     console.log("Cleaning up old PDF collections...");
+//     const collections = await qdrantClient.getCollections();
+//     for (const collection of collections.collections) {
+//       if (
+//         collection.name.startsWith("pdf_") ||
+//         collection.name === "pdf_metadata"
+//       ) {
+//         try {
+//           await qdrantClient.deleteCollection(collection.name);
+//           console.log(`Deleted old collection: ${collection.name}`);
+//         } catch (error) {
+//           console.error(`Error deleting collection ${collection.name}:`, error);
+//         }
+//       }
+//     }
+//     // Clean up uploads directory
+//     const uploadsDir = "uploads/";
+//     if (fs.existsSync(uploadsDir)) {
+//       const files = fs.readdirSync(uploadsDir);
+//       for (const file of files) {
+//         try {
+//           fs.unlinkSync(path.join(uploadsDir, file));
+//           console.log(`Deleted old file: ${file}`);
+//         } catch (error) {
+//           console.error(`Error deleting file ${file}:`, error);
+//         }
+//       }
+//     }
+//     console.log("Cleanup completed");
+//   } catch (error) {
+//     console.error("Error during cleanup:", error);
+//   }
+// };
 // Initialize the worker within the same process
 const worker = new bullmq_1.Worker("file-upload-queue", (job) => __awaiter(void 0, void 0, void 0, function* () {
     try {
@@ -424,8 +423,10 @@ app.get("/chat", clerk_middleware_js_1.clerkAuth, (req, res) => __awaiter(void 0
             console.log(`Detected summary request`);
             isSummaryResponse = true;
             const comprehensiveContent = yield getComprehensiveContent(collectionsToSearch, embeddings);
+            console.log(comprehensiveContent);
             if (comprehensiveContent.length === 0) {
-                responseText = "I couldn't find sufficient content in the uploaded PDFs to create a summary.";
+                responseText =
+                    "I couldn't find sufficient content in the uploaded PDFs to create a summary.";
                 documents = [];
             }
             else {
@@ -486,6 +487,7 @@ Please provide a comprehensive summary:`;
                         collectionName: collection,
                     });
                     const docs = yield vectorStore.similaritySearch(userQuery, 4);
+                    console.log("DOCS", docs);
                     if (docs.length > 0) {
                         let originalFilename = collection;
                         const pdfMetadata = sessionPDFs.find((pdf) => pdf.collectionName === collection);
@@ -494,6 +496,7 @@ Please provide a comprehensive summary:`;
                         }
                         const docsWithCollection = docs.map((doc) => (Object.assign(Object.assign({}, doc), { metadata: Object.assign(Object.assign({}, doc.metadata), { collectionName: collection, originalFilename: originalFilename }) })));
                         allRelevantDocs.push(...docsWithCollection);
+                        console.log("ARD", allRelevantDocs);
                         searchResults.push({
                             collection,
                             originalFilename,
@@ -506,7 +509,8 @@ Please provide a comprehensive summary:`;
                 }
             }
             if (allRelevantDocs.length === 0) {
-                responseText = "I couldn't find any relevant information in the uploaded PDFs to answer your question.";
+                responseText =
+                    "I couldn't find any relevant information in the uploaded PDFs to answer your question.";
                 documents = [];
             }
             else {
@@ -706,10 +710,15 @@ mongoose_1.default
     .catch((err) => console.error("MongoDB connection error:", err));
 app.use("/api/users", user_route_js_1.default);
 // Clean up old collections on server start
-cleanupOldCollections().then(() => {
-    app.listen(PORT, () => {
-        console.log(`Server started on PORT: ${PORT}`);
-        console.log("Worker started and listening for jobs...");
-        console.log("Session-based PDF storage initialized");
-    });
+// cleanupOldCollections().then(() => {
+//   app.listen(PORT, () => {
+//     console.log(`Server started on PORT: ${PORT}`);
+//     console.log("Worker started and listening for jobs...");
+//     console.log("Session-based PDF storage initialized");
+//   });
+// });
+app.listen(PORT, () => {
+    console.log(`Server started on PORT: ${PORT}`);
+    console.log("Worker started and listening for jobs...");
+    console.log("Session-based PDF storage initialized");
 });
