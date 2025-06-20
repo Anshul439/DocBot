@@ -8,14 +8,14 @@ export default function SyncPage() {
   const { user, isLoaded: userLoaded } = useUser();
   const { getToken, isLoaded: authLoaded } = useAuth();
   const router = useRouter();
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  // const [isLoading, setIsLoading] = useState(true);
+  // const [error, setError] = useState<string | null>(null);
   const [loadingMessage, setLoadingMessage] = useState("Initializing...");
 
   useEffect(() => {
     const handleUserSync = async () => {
       try {
-        setError(null);
+        // setError(null);
 
         if (!userLoaded || !authLoaded) {
           setLoadingMessage("Loading authentication...");
@@ -91,10 +91,10 @@ export default function SyncPage() {
         setTimeout(() => router.push("/"), 1500);
       } catch (err) {
         console.error("Error during user sync process:", err);
-        setError(
-          err instanceof Error ? err.message : "An unknown error occurred"
-        );
-        setIsLoading(false);
+        // setError(
+        //   err instanceof Error ? err.message : "An unknown error occurred"
+        // );
+        // setIsLoading(false);
       }
     };
 

@@ -2,29 +2,25 @@
 
 import { Upload, CheckCircle, AlertCircle, Loader2 } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
-import { useAuth, useUser } from "@clerk/nextjs";
+import { useAuth } from "@clerk/nextjs";
 import SignInPrompt from "./prompt";
+import { UploadStatus } from "../app/types";
 
-enum UploadStatus {
-  IDLE,
-  UPLOADING,
-  PROCESSING,
-  SUCCESS,
-  ERROR
+interface FileUploadComponentProps {
+  onUploadSuccess?: () => void;
 }
 
-const FileUploadComponent = () => {
-  const [file, setFile] = useState(null);
-  const [fileSize, setFileSize] = useState("");
-  const [fileName, setFileName] = useState("");
+const FileUploadComponent: React.FC<FileUploadComponentProps> = () => {
+  // const [file, setFile] = useState<File | null>(null);
+  const [fileSize, setFileSize] = useState<string>("");
+  const [fileName, setFileName] = useState<string>("");
   const [uploadStatus, setUploadStatus] = useState<UploadStatus>(UploadStatus.IDLE);
-  const [statusMessage, setStatusMessage] = useState("");
-  const [isHovered, setIsHovered] = useState(false);
-  const [showAuthPrompt, setShowAuthPrompt] = useState(false);
+  const [statusMessage, setStatusMessage] = useState<string>("");
+  const [isHovered, setIsHovered] = useState<boolean>(false);
+  const [showAuthPrompt, setShowAuthPrompt] = useState<boolean>(false);
   const [jobId, setJobId] = useState<string | null>(null);
-  const fileInputRef = useRef(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const { isSignedIn } = useAuth();
-  const { user, isLoaded: userLoaded } = useUser();
 
   useEffect(() => {
     if (jobId && uploadStatus === UploadStatus.PROCESSING) {
@@ -33,25 +29,25 @@ const FileUploadComponent = () => {
     }
   }, [jobId, uploadStatus]);
 
-  const checkJobStatus = async () => {
+  const checkJobStatus = async (): Promise<void> => {
     if (!jobId) return;
-    
+
     try {
       const response = await fetch(`http://localhost:8000/job/${jobId}`);
       const data = await response.json();
-      
+
       if (data.success) {
-        if (data.state === 'completed') {
+        if (data.state === "completed") {
           setUploadStatus(UploadStatus.SUCCESS);
-          setStatusMessage('PDF processed successfully!');
+          setStatusMessage("PDF processed successfully!");
           setJobId(null);
-          
-          if (typeof window !== 'undefined') {
-            window.dispatchEvent(new CustomEvent('pdf-uploaded'));
+
+          if (typeof window !== "undefined") {
+            window.dispatchEvent(new CustomEvent("pdf-uploaded"));
           }
-        } else if (data.state === 'failed') {
+        } else if (data.state === "failed") {
           setUploadStatus(UploadStatus.ERROR);
-          setStatusMessage('Processing failed. Please try again.');
+          setStatusMessage("Processing failed. Please try again.");
           setJobId(null);
         }
       }
@@ -60,33 +56,33 @@ const FileUploadComponent = () => {
     }
   };
 
-  const handleFileUpload = async (event) => {
-    const selectedFile = event.target.files[0];
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>): Promise<void> => {
+    const selectedFile = event.target.files?.[0];
     if (!selectedFile) return;
-    
+
     if (selectedFile.type !== "application/pdf") {
       setUploadStatus(UploadStatus.ERROR);
       setStatusMessage("Only PDF files are supported");
       return;
     }
-    
-    setFile(selectedFile);
+
+    // setFile(selectedFile);
     setFileName(selectedFile.name);
-    setFileSize((selectedFile.size / (1024 * 1024)).toFixed(2) + " MB");
+    setFileSize(`${(selectedFile.size / (1024 * 1024)).toFixed(2)} MB`);
     setUploadStatus(UploadStatus.UPLOADING);
     setStatusMessage("Uploading file...");
 
     try {
       const formData = new FormData();
       formData.append("pdf", selectedFile);
-      
+
       const response = await fetch("http://localhost:8000/upload/pdf", {
         method: "POST",
         body: formData,
       });
-      
+
       const data = await response.json();
-      
+
       if (data.success) {
         setUploadStatus(UploadStatus.PROCESSING);
         setStatusMessage("Processing PDF...");
@@ -97,40 +93,47 @@ const FileUploadComponent = () => {
     } catch (error) {
       console.error("Error uploading file:", error);
       setUploadStatus(UploadStatus.ERROR);
-      setStatusMessage(error instanceof Error ? error.message : "Upload failed");
+      setStatusMessage(
+        error instanceof Error ? error.message : "Upload failed"
+      );
     }
   };
 
-  const handleDragOver = (e) => {
+  const handleDragOver = (e: React.DragEvent<HTMLDivElement>): void => {
     e.preventDefault();
     setIsHovered(true);
   };
 
-  const handleDragLeave = (e) => {
+  const handleDragLeave = (e: React.DragEvent<HTMLDivElement>): void => {
     e.preventDefault();
     setIsHovered(false);
   };
 
-  const handleDrop = (e) => {
+  const handleDrop = (e: React.DragEvent<HTMLDivElement>): void => {
     e.preventDefault();
     setIsHovered(false);
-    
+
     if (!isSignedIn) {
       setShowAuthPrompt(true);
       return;
     }
-    
+
     const droppedFile = e.dataTransfer.files[0];
     if (droppedFile && droppedFile.type === "application/pdf") {
-      handleFileUpload({ target: { files: [droppedFile] } });
+      const event = {
+        target: {
+          files: [droppedFile]
+        }
+      } as unknown as React.ChangeEvent<HTMLInputElement>;
+      handleFileUpload(event);
     } else {
       setUploadStatus(UploadStatus.ERROR);
       setStatusMessage("Only PDF files are supported");
     }
   };
 
-  const handleReset = () => {
-    setFile(null);
+  const handleReset = (): void => {
+    // setFile(null);
     setFileName("");
     setFileSize("");
     setUploadStatus(UploadStatus.IDLE);
@@ -138,7 +141,7 @@ const FileUploadComponent = () => {
     setJobId(null);
   };
 
-  const handleAreaClick = () => {
+  const handleAreaClick = (): void => {
     if (!isUploading && !isProcessing) {
       if (!isSignedIn) {
         setShowAuthPrompt(true);
@@ -146,14 +149,14 @@ const FileUploadComponent = () => {
     }
   };
 
-  const handleSelectPdfClick = (e) => {
+  const handleSelectPdfClick = (e: React.MouseEvent<HTMLDivElement>): void => {
     e.stopPropagation();
-    
+
     if (!isSignedIn) {
       setShowAuthPrompt(true);
       return;
     }
-    
+
     if (!isUploading && !isProcessing) {
       fileInputRef.current?.click();
     }
@@ -165,9 +168,11 @@ const FileUploadComponent = () => {
   const isError = uploadStatus === UploadStatus.ERROR;
   const isIdle = uploadStatus === UploadStatus.IDLE;
 
-  const renderStatusIcon = () => {
+  const renderStatusIcon = ()=> {
     if (isUploading || isProcessing) {
-      return <Loader2 className="h-5 w-5 md:h-6 md:w-6 text-indigo-500 animate-spin" />;
+      return (
+        <Loader2 className="h-5 w-5 md:h-6 md:w-6 text-indigo-500 animate-spin" />
+      );
     } else if (isSuccess) {
       return <CheckCircle className="h-5 w-5 md:h-6 md:w-6 text-green-500" />;
     } else if (isError) {
@@ -181,10 +186,14 @@ const FileUploadComponent = () => {
     <>
       <div
         className={`border-2 border-dashed border-gray-800 rounded-lg flex-1 flex justify-center items-center transition-colors duration-300 cursor-pointer 
-        ${isHovered ? 'border-indigo-900 bg-[#121212fd]' : ''} 
-        ${isUploading || isProcessing ? 'cursor-wait opacity-80' : 'hover:bg-[#121212fd] hover:border-indigo-900'} 
-        ${isSuccess ? 'border-green-900' : ''} 
-        ${isError ? 'border-red-900' : ''}`}
+        ${isHovered ? "border-indigo-900 bg-[#121212fd]" : ""} 
+        ${
+          isUploading || isProcessing
+            ? "cursor-wait opacity-80"
+            : "hover:bg-[#121212fd] hover:border-indigo-900"
+        } 
+        ${isSuccess ? "border-green-900" : ""} 
+        ${isError ? "border-red-900" : ""}`}
         onClick={handleAreaClick}
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
@@ -195,11 +204,13 @@ const FileUploadComponent = () => {
             <div className="bg-[#1A1A1A] rounded-full p-3 md:p-4 mb-4 md:mb-6">
               <Upload className="h-5 w-5 md:h-6 md:w-6 text-indigo-500" />
             </div>
-            <p className="mb-2 text-gray-200 text-sm md:text-base">Drag & drop or click to upload</p>
+            <p className="mb-2 text-gray-200 text-sm md:text-base">
+              Drag & drop or click to upload
+            </p>
             <p className="text-xs md:text-sm text-gray-500 mb-4 md:mb-6">
               Supports PDF files up to 10MB
             </p>
-            <div 
+            <div
               className="bg-[#1A1A1A] text-white px-4 py-1 md:px-6 md:py-2 rounded text-xs md:text-sm hover:bg-[#252525] transition duration-200"
               onClick={handleSelectPdfClick}
             >
@@ -218,17 +229,23 @@ const FileUploadComponent = () => {
             <div className="bg-[#1A1A1A] rounded-full p-3 md:p-4 mb-2 md:mb-4">
               {renderStatusIcon()}
             </div>
-            <h3 className="text-center font-medium mb-1 max-w-full truncate px-2 md:px-4 text-sm md:text-base">{fileName}</h3>
+            <h3 className="text-center font-medium mb-1 max-w-full truncate px-2 md:px-4 text-sm md:text-base">
+              {fileName}
+            </h3>
             <p className="text-gray-500 text-xs md:text-sm mb-2">{fileSize}</p>
-            
-            <p className={`text-sm mb-3 md:mb-4 ${
-              isSuccess ? 'text-green-500' : 
-              isError ? 'text-red-500' : 
-              'text-indigo-400'
-            }`}>
+
+            <p
+              className={`text-sm mb-3 md:mb-4 ${
+                isSuccess
+                  ? "text-green-500"
+                  : isError
+                  ? "text-red-500"
+                  : "text-indigo-400"
+              }`}
+            >
               {statusMessage}
             </p>
-            
+
             {!isUploading && !isProcessing && (
               <button
                 onClick={handleReset}
@@ -237,7 +254,7 @@ const FileUploadComponent = () => {
                 {isError ? "Try Again" : "Upload Another"}
               </button>
             )}
-            
+
             {isProcessing && (
               <div className="w-full max-w-xs bg-gray-800 rounded-full h-1.5 mb-3 md:mb-4">
                 <div className="bg-indigo-600 h-1.5 rounded-full animate-pulse"></div>
@@ -246,7 +263,7 @@ const FileUploadComponent = () => {
           </div>
         )}
       </div>
-      
+
       {showAuthPrompt && (
         <SignInPrompt onClose={() => setShowAuthPrompt(false)} />
       )}

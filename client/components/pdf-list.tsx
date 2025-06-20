@@ -2,21 +2,27 @@
 
 import { Trash2Icon } from "lucide-react";
 import { useAuth } from "@clerk/nextjs";
+import { IPDF } from "../app/types";
 
-const PDFListComponent = ({ 
-  pdfs, 
-  selectedPDF, 
-  setSelectedPDF, 
-  onRefresh 
-}: {
-  pdfs: any[];
+interface PDFListComponentProps {
+  pdfs: IPDF[];
   selectedPDF: string | null;
   setSelectedPDF: (collectionName: string | null) => void;
   onRefresh: () => void;
+}
+
+const PDFListComponent: React.FC<PDFListComponentProps> = ({
+  pdfs,
+  selectedPDF,
+  setSelectedPDF,
+  onRefresh,
 }) => {
   const { getToken } = useAuth();
 
-  const handleDeletePDF = async (collectionName: string, event: React.MouseEvent) => {
+  const handleDeletePDF = async (
+    collectionName: string,
+    event: React.MouseEvent
+  ) => {
     event.stopPropagation();
 
     try {
@@ -35,11 +41,11 @@ const PDFListComponent = ({
 
       if (data.success) {
         onRefresh();
-        
+
         if (pdfs.length === 1) {
           setSelectedPDF(null);
         }
-        
+
         if (selectedPDF === collectionName) {
           setSelectedPDF(null);
         }

@@ -4,25 +4,12 @@ import { useState, useRef, useEffect } from "react";
 import { SendIcon } from "lucide-react";
 import { useAuth } from "@clerk/nextjs";
 import SignInPrompt from "./prompt";
-
-interface Doc {
-  pageContent?: string;
-  metadata?: {
-    loc?: {
-      pageNumber?: number;
-    };
-    source?: string;
-    collectionName?: string;
-    score?: number;
-  };
-}
-
-interface IMessage {
-  role: "assistant" | "user";
-  content?: string;
-  documents?: any[];
-  timestamp?: string;
-}
+import {
+  IPDF,
+  IMessage,
+  ChatResponse,
+  IDocument
+} from "../app/types";
 
 interface ChatComponentProps {
   selectedPDF: string | null;
@@ -31,28 +18,24 @@ interface ChatComponentProps {
     collectionName: string | null,
     messages: IMessage[]
   ) => void;
-  availablePDFs: Array<{
-    collectionName: string;
-    originalFilename: string;
-  }>;
+  availablePDFs: IPDF[];
   hasPDFs: boolean;
 }
 
-const ChatComponent = ({
+const ChatComponent: React.FC<ChatComponentProps> = ({
   selectedPDF,
   chatHistory,
   updateChatHistory,
   availablePDFs,
   hasPDFs,
-}: ChatComponentProps) => {
+}) => {
   const [message, setMessage] = useState<string>("");
   const [loading, setLoading] = useState<boolean>(false);
   const [showAuthPrompt, setShowAuthPrompt] = useState<boolean>(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const { isSignedIn } = useAuth();
-  const { getToken, isLoaded: authLoaded } = useAuth();
+  const { isSignedIn, getToken } = useAuth();
 
-  const formatTime = () => {
+  const formatTime = (): string => {
     const now = new Date();
     let hours = now.getHours();
     const minutes = now.getMinutes().toString().padStart(2, "0");
@@ -62,7 +45,7 @@ const ChatComponent = ({
     return `${hours}:${minutes} ${ampm}`;
   };
 
-  const scrollToBottom = () => {
+  const scrollToBottom = (): void => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
 
@@ -70,7 +53,7 @@ const ChatComponent = ({
     scrollToBottom();
   }, [chatHistory]);
 
-  const formatResponse = (content: string) => {
+  const formatResponse = (content: string): string => {
     return content
       .replace(/\n/g, "<br />")
       .replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>")
@@ -81,7 +64,7 @@ const ChatComponent = ({
       .replace(/\n\n/g, "<br /><br />");
   };
 
-  const handleSendMessage = async () => {
+  const handleSendMessage = async (): Promise<void> => {
     if (!message.trim() || loading) return;
 
     if (!isSignedIn) {
@@ -89,9 +72,10 @@ const ChatComponent = ({
       return;
     }
 
-    const userMessage = {
+    const userMessage: IMessage = {
       role: "user",
       content: message,
+      timestamp: formatTime()
     };
 
     const updatedHistory = [...chatHistory, userMessage];
@@ -101,11 +85,9 @@ const ChatComponent = ({
 
     try {
       const token = await getToken();
-      console.log(token);
+      if (!token) throw new Error("No authentication token available");
 
-      let url = `http://localhost:8000/chat?message=${encodeURIComponent(
-        message
-      )}`;
+      let url = `http://localhost:8000/chat?message=${encodeURIComponent(message)}`;
       if (selectedPDF) {
         url += `&collection=${encodeURIComponent(selectedPDF)}`;
       }
@@ -118,27 +100,30 @@ const ChatComponent = ({
         },
       });
 
-      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
 
-      if (!response.ok || !data.success) {
+      const data: ChatResponse = await response.json();
+
+      if (!data.success) {
         throw new Error(data.error || "Failed to get response");
       }
 
-      const assistantMessage = {
+      const assistantMessage: IMessage = {
         role: "assistant",
         content: data.message,
         documents: data.documents,
+        timestamp: formatTime()
       };
 
       updateChatHistory(selectedPDF, [...updatedHistory, assistantMessage]);
     } catch (error) {
       console.error("Error:", error);
-      const errorMessage = {
+      const errorMessage: IMessage = {
         role: "assistant",
-        content:
-          error instanceof Error
-            ? error.message
-            : "An unexpected error occurred",
+        content: error instanceof Error ? error.message : "An unexpected error occurred",
+        timestamp: formatTime()
       };
       updateChatHistory(selectedPDF, [...updatedHistory, errorMessage]);
     } finally {
@@ -146,17 +131,21 @@ const ChatComponent = ({
     }
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>): void => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       handleSendMessage();
     }
   };
 
-  const handleInputFocus = () => {
+  const handleInputFocus = (): void => {
     if (!isSignedIn) {
       setShowAuthPrompt(true);
     }
+  };
+
+  const handleMessageChange = (e: React.ChangeEvent<HTMLInputElement>): void => {
+    setMessage(e.target.value);
   };
 
   return (
@@ -168,7 +157,7 @@ const ChatComponent = ({
             <span>
               Chatting with:{" "}
               <span className="text-indigo-400 font-medium">
-                {availablePDFs?.find(
+                {availablePDFs.find(
                   (pdf) => pdf.collectionName === selectedPDF
                 )?.originalFilename || "Selected PDF"}
               </span>
@@ -215,7 +204,7 @@ const ChatComponent = ({
                 <div className="mt-2 text-xs opacity-70">
                   <p className="font-semibold">Sources:</p>
                   <ul className="list-disc pl-4 space-y-1">
-                    {msg.documents.map((doc, i) => (
+                    {msg.documents.map((doc: IDocument, i: number) => (
                       <li key={i}>
                         {doc.metadata?.source || "Document"} (Page{" "}
                         {doc.metadata?.loc?.pageNumber || "N/A"})
@@ -258,7 +247,7 @@ const ChatComponent = ({
           <input
             type="text"
             value={message}
-            onChange={(e) => setMessage(e.target.value)}
+            onChange={handleMessageChange}
             onKeyDown={handleKeyDown}
             onFocus={handleInputFocus}
             placeholder={

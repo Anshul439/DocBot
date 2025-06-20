@@ -6,23 +6,16 @@ import FileUploadComponent from "../components/file-upload";
 import PDFListComponent from "../components/pdf-list";
 import { UserButton, SignInButton, useAuth, useUser } from "@clerk/nextjs";
 import { Menu, X } from "lucide-react";
-
-interface IMessage {
-  role: "assistant" | "user";
-  content?: string;
-  documents?: any[];
-  timestamp?: string;
-}
+import { IMessage, IPDF, FetchPdfsResponse, FetchChatHistoryResponse } from "../app/types";
 
 export default function Home() {
-  const { isSignedIn } = useAuth();
-  const [availablePDFs, setAvailablePDFs] = useState([]);
+  const { isSignedIn, getToken } = useAuth();
+  const { user } = useUser();
+  const [availablePDFs, setAvailablePDFs] = useState<IPDF[]>([]);
   const [selectedPDF, setSelectedPDF] = useState<string | null>(null);
   const [chatHistories, setChatHistories] = useState<Record<string, IMessage[]>>({ all: [] });
-  const { user, isLoaded: userLoaded } = useUser();
-  const { getToken, isLoaded: authLoaded } = useAuth();
-  const [hasPDFs, setHasPDFs] = useState(false);
-  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+  const [hasPDFs, setHasPDFs] = useState<boolean>(false);
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState<boolean>(false);
 
   useEffect(() => {
     console.log(user);
@@ -33,12 +26,16 @@ export default function Home() {
 
     window.addEventListener("pdf-uploaded", handlePdfUploaded);
     return () => window.removeEventListener("pdf-uploaded", handlePdfUploaded);
-  }, []);
+  }, [user]);
 
-  const fetchAvailablePDFs = async () => {
+  const fetchAvailablePDFs = async (): Promise<void> => {
     try {
       const response = await fetch("http://localhost:8000/pdfs");
-      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
+      const data: FetchPdfsResponse = await response.json();
 
       if (data.success && data.pdfs) {
         setAvailablePDFs(data.pdfs);
@@ -46,7 +43,7 @@ export default function Home() {
 
         setChatHistories((prev) => {
           const newHistories = { ...prev };
-          data.pdfs.forEach((pdf: any) => {
+          data.pdfs.forEach((pdf: IPDF) => {
             if (!newHistories[pdf.collectionName]) {
               newHistories[pdf.collectionName] = [];
             }
@@ -62,31 +59,37 @@ export default function Home() {
     }
   };
 
-  const fetchChatHistory = async (collectionName: string | null) => {
+  const fetchChatHistory = async (collectionName: string | null): Promise<void> => {
     try {
       const token = await getToken();
-      const response = await fetch(`http://localhost:8000/chat/history?collectionName=${collectionName || ''}`, {
-        headers: {
-          Authorization: `Bearer ${token}`
+      if (!token) {
+        throw new Error("No authentication token available");
+      }
+
+      const response = await fetch(
+        `http://localhost:8000/chat/history?collectionName=${collectionName || ""}`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
         }
-      });
-      
-      const data = await response.json();
-      
-      if (data.success) {
-        updateChatHistory(collectionName, data.messages.map((msg: any) => ({
-          role: msg.role,
-          content: msg.content,
-          documents: msg.documents,
-          timestamp: msg.timestamp
-        })));
+      );
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data: FetchChatHistoryResponse = await response.json();
+
+      if (data.success && data.messages) {
+        updateChatHistory(collectionName, data.messages);
       }
     } catch (error) {
       console.error("Error fetching chat history:", error);
     }
   };
 
-  const handleSelectPDF = (collectionName: string | null) => {
+  const handleSelectPDF = (collectionName: string | null): void => {
     setSelectedPDF(collectionName);
     if (isSignedIn) {
       fetchChatHistory(collectionName);
@@ -94,7 +97,10 @@ export default function Home() {
     setMobileSidebarOpen(false);
   };
 
-  const updateChatHistory = (collectionName: string | null, messages: IMessage[]) => {
+  const updateChatHistory = (
+    collectionName: string | null,
+    messages: IMessage[]
+  ): void => {
     const key = collectionName || "all";
     setChatHistories((prev) => ({
       ...prev,
@@ -102,14 +108,23 @@ export default function Home() {
     }));
   };
 
+  const handleMobileMenuClick = (): void => {
+    setMobileSidebarOpen(!mobileSidebarOpen);
+  };
+
+  const handleOverlayClick = (): void => {
+    setMobileSidebarOpen(false);
+  };
+
   return (
     <div className="bg-[#000000f7] text-white h-screen flex flex-col">
       {/* Header */}
       <div className="p-4 border-b border-gray-800 flex justify-between items-center">
         <div className="flex items-center space-x-4">
-          <button 
+          <button
             className="md:hidden"
-            onClick={() => setMobileSidebarOpen(!mobileSidebarOpen)}
+            onClick={handleMobileMenuClick}
+            aria-label="Toggle menu"
           >
             {mobileSidebarOpen ? <X size={24} /> : <Menu size={24} />}
           </button>
@@ -130,7 +145,11 @@ export default function Home() {
 
       <div className="flex flex-1 flex-col md:flex-row overflow-hidden">
         {/* Left Side Panel - Mobile Overlay */}
-        <div className={`${mobileSidebarOpen ? 'block' : 'hidden'} md:block fixed md:relative inset-0 z-40 md:z-auto w-full md:w-[30%] bg-[#000000f7] md:bg-transparent border-r border-gray-800 flex flex-col overflow-y-auto`}>
+        <div
+          className={`${
+            mobileSidebarOpen ? "block" : "hidden"
+          } md:block fixed md:relative inset-0 z-40 md:z-auto w-full md:w-[30%] bg-[#000000f7] md:bg-transparent border-r border-gray-800 flex flex-col overflow-y-auto`}
+        >
           <div className="p-4 h-1/2 flex flex-col overflow-hidden">
             <h2 className="text-xl mb-4">Upload PDF</h2>
             <FileUploadComponent />
@@ -150,9 +169,9 @@ export default function Home() {
         {/* Chat Section */}
         <div className="w-full md:w-[70%] overflow-hidden relative">
           {mobileSidebarOpen && (
-            <div 
+            <div
               className="md:hidden fixed inset-0 bg-black bg-opacity-50 z-30"
-              onClick={() => setMobileSidebarOpen(false)}
+              onClick={handleOverlayClick}
             />
           )}
           <ChatComponent
