@@ -272,7 +272,7 @@ app.post(
     }
 
     const clerkUserId = (req as any).auth.userId;
-    
+
     try {
       // Find or create the user in your MongoDB
       const user = await User.findOneAndUpdate(
@@ -523,7 +523,6 @@ async function getComprehensiveContent(
 }
 
 // Enhanced chat endpoint with complete functionality
-// Enhanced chat endpoint with complete functionality - REPLACE the existing chat endpoint
 app.get(
   "/chat",
   clerkAuth,
@@ -551,19 +550,6 @@ app.get(
         return;
       }
 
-      // Save user message to history
-      try {
-        await ChatMessage.create({
-          userId: user._id, // Use MongoDB user ID
-          collectionName: collectionName || null,
-          role: "user",
-          content: userQuery,
-          timestamp: new Date(),
-        });
-      } catch (error) {
-        console.error("Error saving user message:", error);
-      }
-
       console.log(
         `Processing query: "${userQuery}" for collection: ${
           collectionName || "all"
@@ -572,9 +558,9 @@ app.get(
 
       let collectionsToSearch: string[] = [];
       if (collectionName) {
-        const pdf = await PDFMetadata.findOne({ 
+        const pdf = await PDFMetadata.findOne({
           collectionName,
-          userId: user._id // Ensure PDF belongs to user
+          userId: user._id, // Ensure PDF belongs to user
         });
         if (!pdf) {
           res.json({
@@ -589,6 +575,21 @@ app.get(
         // Get all PDFs for this specific user
         const userPDFs = await PDFMetadata.find({ userId: user._id });
         collectionsToSearch = userPDFs.map((pdf) => pdf.collectionName);
+
+        // Save user message to history
+        if (collectionsToSearch.length !== 0) {
+          try {
+            await ChatMessage.create({
+              userId: user._id, // Use MongoDB user ID
+              collectionName: collectionName || null,
+              role: "user",
+              content: userQuery,
+              timestamp: new Date(),
+            });
+          } catch (error) {
+            console.error("Error saving user message:", error);
+          }
+        }
 
         if (collectionsToSearch.length === 0) {
           res.json({
@@ -705,9 +706,9 @@ Please provide a comprehensive summary:`;
                 originalFilename = pdfMetadata.originalFilename;
               } else {
                 // Fallback: get from database
-                const dbPdf = await PDFMetadata.findOne({ 
+                const dbPdf = await PDFMetadata.findOne({
                   collectionName: collection,
-                  userId: user._id 
+                  userId: user._id,
                 });
                 if (dbPdf) {
                   originalFilename = dbPdf.originalFilename;
@@ -855,62 +856,70 @@ app.delete(
       const { collectionName } = req.params;
       const clerkUserId = (req as any).auth.userId;
 
-      console.log(`Delete request for collection: ${collectionName}, user: ${clerkUserId}`);
+      console.log(
+        `Delete request for collection: ${collectionName}, user: ${clerkUserId}`
+      );
 
       // 1. Find user first
       const user = await User.findOne({ clerkId: clerkUserId });
       if (!user) {
         console.log("User not found");
-        return res.status(404).json({ 
-          success: false, 
-          error: "User not found" 
+        return res.status(404).json({
+          success: false,
+          error: "User not found",
         });
       }
 
       // 2. Find and validate PDF ownership
-      const pdfToDelete = await PDFMetadata.findOne({ 
+      const pdfToDelete = await PDFMetadata.findOne({
         collectionName,
-        userId: user._id 
+        userId: user._id,
       });
 
       if (!pdfToDelete) {
         console.log(`PDF not found or not owned by user: ${collectionName}`);
-        return res.status(404).json({ 
-          success: false, 
-          error: "PDF not found or not owned by user" 
+        return res.status(404).json({
+          success: false,
+          error: "PDF not found or not owned by user",
         });
       }
 
       console.log(`Found PDF to delete: ${pdfToDelete.originalFilename}`);
 
       // 3. Check remaining PDFs count BEFORE deletion
-      const totalPDFsBeforeDeletion = await PDFMetadata.countDocuments({ userId: user._id });
+      const totalPDFsBeforeDeletion = await PDFMetadata.countDocuments({
+        userId: user._id,
+      });
       const isLastPDF = totalPDFsBeforeDeletion === 1;
 
       // 4. Delete from database first (this is the critical operation)
-      const deletedPDF = await PDFMetadata.findOneAndDelete({ 
+      const deletedPDF = await PDFMetadata.findOneAndDelete({
         collectionName,
-        userId: user._id 
+        userId: user._id,
       });
 
       if (!deletedPDF) {
         console.log("Failed to delete from database");
-        return res.status(500).json({ 
-          success: false, 
-          error: "Failed to delete PDF from database" 
+        return res.status(500).json({
+          success: false,
+          error: "Failed to delete PDF from database",
         });
       }
 
-      console.log(`Successfully deleted from database: ${deletedPDF.originalFilename}`);
+      console.log(
+        `Successfully deleted from database: ${deletedPDF.originalFilename}`
+      );
 
       // 5. If this was the last PDF, delete "All PDFs" chat messages
       if (isLastPDF) {
         try {
           const deletedChatMessages = await ChatMessage.deleteMany({
             userId: user._id,
-            collectionName: null // These are "All PDFs" messages
+            collectionName: null, // These are "All PDFs" messages
           });
-          console.log(`Deleted ${deletedChatMessages.deletedCount} "All PDFs" chat messages`);
+          console.log(
+            `Deleted ${deletedChatMessages.deletedCount} "All PDFs" chat messages`
+          );
         } catch (chatError) {
           console.error("Error deleting All PDFs chat messages:", chatError);
           // Don't fail the whole operation for this
@@ -921,20 +930,22 @@ app.delete(
       try {
         const deletedSpecificChats = await ChatMessage.deleteMany({
           userId: user._id,
-          collectionName: collectionName
+          collectionName: collectionName,
         });
-        console.log(`Deleted ${deletedSpecificChats.deletedCount} specific PDF chat messages`);
+        console.log(
+          `Deleted ${deletedSpecificChats.deletedCount} specific PDF chat messages`
+        );
       } catch (chatError) {
         console.error("Error deleting specific PDF chat messages:", chatError);
         // Don't fail the whole operation for this
       }
 
       // 7. Respond to client immediately with success
-      res.json({ 
-        success: true, 
+      res.json({
+        success: true,
         message: "PDF deleted successfully",
         wasLastPDF: isLastPDF,
-        deletedCollection: collectionName
+        deletedCollection: collectionName,
       });
 
       // 8. Background cleanup operations (don't await - let them run async)
@@ -944,7 +955,10 @@ app.delete(
           if (deletedPDF.filePath && fs.existsSync(deletedPDF.filePath)) {
             fs.unlink(deletedPDF.filePath, (err) => {
               if (err) {
-                console.error(`File deletion error for ${deletedPDF.filePath}:`, err);
+                console.error(
+                  `File deletion error for ${deletedPDF.filePath}:`,
+                  err
+                );
               } else {
                 console.log(`File deleted: ${deletedPDF.filePath}`);
               }
@@ -956,59 +970,64 @@ app.delete(
             await qdrantClient.deleteCollection(collectionName);
             console.log(`Qdrant collection deleted: ${collectionName}`);
           } catch (qdrantError) {
-            console.error(`Qdrant deletion error for ${collectionName}:`, qdrantError);
+            console.error(
+              `Qdrant deletion error for ${collectionName}:`,
+              qdrantError
+            );
             // You might want to implement a retry mechanism or cleanup job here
           }
-
         } catch (bgError) {
           console.error("Background cleanup error:", bgError);
           // Log to your error tracking system if you have one
         }
       });
-
     } catch (error) {
       console.error("PDF deletion error:", error);
-      res.status(500).json({ 
-        success: false, 
-        error: "Internal server error while deleting PDF" 
+      res.status(500).json({
+        success: false,
+        error: "Internal server error while deleting PDF",
       });
     }
   }
 );
 
 // Get chat history endpoint
-app.get("/chat/history", clerkAuth, async (req: Request, res: Response): Promise<void> => {
-  try {
-    const { collectionName, limit } = req.query;
-    const clerkUserId = (req as any).auth.userId;
+app.get(
+  "/chat/history",
+  clerkAuth,
+  async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { collectionName, limit } = req.query;
+      const clerkUserId = (req as any).auth.userId;
 
-    // First find the user in MongoDB using Clerk ID
-    const user = await User.findOne({ clerkId: clerkUserId });
-    if (!user) {
-      res.json({ success: true, messages: [] }); // No user means no messages
-      return;
+      // First find the user in MongoDB using Clerk ID
+      const user = await User.findOne({ clerkId: clerkUserId });
+      if (!user) {
+        res.json({ success: true, messages: [] }); // No user means no messages
+        return;
+      }
+
+      const query: any = { userId: user._id }; // Use MongoDB user ID
+      if (collectionName) {
+        query.collectionName = collectionName;
+      } else {
+        query.collectionName = null;
+      }
+
+      const messages = await ChatMessage.find(query)
+        .sort({ timestamp: 1 })
+        .limit(parseInt(limit as string) || 50);
+
+      res.json({ success: true, messages });
+    } catch (error) {
+      console.error("Error fetching chat history:", error);
+      res.status(500).json({
+        success: false,
+        error: "Failed to fetch chat history",
+      });
     }
-
-    const query: any = { userId: user._id }; // Use MongoDB user ID
-    if (collectionName) {
-      query.collectionName = collectionName;
-    } else {
-      query.collectionName = null;
-    }
-
-    const messages = await ChatMessage.find(query)
-      .sort({ timestamp: 1 })
-      .limit(parseInt(limit as string) || 50);
-
-    res.json({ success: true, messages });
-  } catch (error) {
-    console.error("Error fetching chat history:", error);
-    res.status(500).json({
-      success: false,
-      error: "Failed to fetch chat history",
-    });
   }
-});
+);
 
 const PORT = process.env.PORT || 8000;
 

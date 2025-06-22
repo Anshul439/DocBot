@@ -17,6 +17,8 @@ export default function Home() {
   const [hasPDFs, setHasPDFs] = useState<boolean>(false);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState<boolean>(false);
   const [isInitialLoad, setIsInitialLoad] = useState<boolean>(true);
+  // Add loading states for each chat context
+  const [loadingStates, setLoadingStates] = useState<Record<string, boolean>>({});
 
 const fetchAvailablePDFs = useCallback(async (): Promise<void> => {
   if (!isSignedIn) {
@@ -47,6 +49,7 @@ const fetchAvailablePDFs = useCallback(async (): Promise<void> => {
       if (data.pdfs.length === 0) {
         setChatHistories({ all: [] });
         setSelectedPDF(null);
+        setLoadingStates({}); // Clear loading states
       } else {
         setChatHistories((prev) => {
           const newHistories = { ...prev };
@@ -57,12 +60,27 @@ const fetchAvailablePDFs = useCallback(async (): Promise<void> => {
           });
           return newHistories;
         });
+        
+        // Initialize loading states for new PDFs
+        setLoadingStates((prev) => {
+          const newLoadingStates = { ...prev };
+          data.pdfs.forEach((pdf: IPDF) => {
+            if (!(pdf.collectionName in newLoadingStates)) {
+              newLoadingStates[pdf.collectionName] = false;
+            }
+          });
+          if (!('all' in newLoadingStates)) {
+            newLoadingStates['all'] = false;
+          }
+          return newLoadingStates;
+        });
       }
     } else {
       setHasPDFs(false);
       // Clear chat history when fetch fails or no PDFs
       setChatHistories({ all: [] });
       setSelectedPDF(null);
+      setLoadingStates({});
     }
   } catch (error) {
     console.error("Error fetching PDFs:", error);
@@ -219,6 +237,8 @@ const fetchAvailablePDFs = useCallback(async (): Promise<void> => {
               updateChatHistory={updateChatHistory}
               availablePDFs={availablePDFs}
               hasPDFs={hasPDFs}
+              loadingStates={loadingStates}
+              setLoadingStates={setLoadingStates}
             />
           )}
           {/* Show loading state during initial load */}

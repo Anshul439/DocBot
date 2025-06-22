@@ -394,7 +394,6 @@ function getComprehensiveContent(collectionsToSearch, embeddings) {
     });
 }
 // Enhanced chat endpoint with complete functionality
-// Enhanced chat endpoint with complete functionality - REPLACE the existing chat endpoint
 app.get("/chat", clerk_middleware_js_1.clerkAuth, (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const userQuery = req.query.message;
@@ -416,25 +415,12 @@ app.get("/chat", clerk_middleware_js_1.clerkAuth, (req, res) => __awaiter(void 0
             });
             return;
         }
-        // Save user message to history
-        try {
-            yield chat_model_1.default.create({
-                userId: user._id, // Use MongoDB user ID
-                collectionName: collectionName || null,
-                role: "user",
-                content: userQuery,
-                timestamp: new Date(),
-            });
-        }
-        catch (error) {
-            console.error("Error saving user message:", error);
-        }
         console.log(`Processing query: "${userQuery}" for collection: ${collectionName || "all"}`);
         let collectionsToSearch = [];
         if (collectionName) {
             const pdf = yield pdf_model_js_1.default.findOne({
                 collectionName,
-                userId: user._id // Ensure PDF belongs to user
+                userId: user._id, // Ensure PDF belongs to user
             });
             if (!pdf) {
                 res.json({
@@ -450,6 +436,21 @@ app.get("/chat", clerk_middleware_js_1.clerkAuth, (req, res) => __awaiter(void 0
             // Get all PDFs for this specific user
             const userPDFs = yield pdf_model_js_1.default.find({ userId: user._id });
             collectionsToSearch = userPDFs.map((pdf) => pdf.collectionName);
+            // Save user message to history
+            if (collectionsToSearch.length !== 0) {
+                try {
+                    yield chat_model_1.default.create({
+                        userId: user._id, // Use MongoDB user ID
+                        collectionName: collectionName || null,
+                        role: "user",
+                        content: userQuery,
+                        timestamp: new Date(),
+                    });
+                }
+                catch (error) {
+                    console.error("Error saving user message:", error);
+                }
+            }
             if (collectionsToSearch.length === 0) {
                 res.json({
                     success: false,
@@ -545,7 +546,7 @@ Please provide a comprehensive summary:`;
                             // Fallback: get from database
                             const dbPdf = yield pdf_model_js_1.default.findOne({
                                 collectionName: collection,
-                                userId: user._id
+                                userId: user._id,
                             });
                             if (dbPdf) {
                                 originalFilename = dbPdf.originalFilename;
@@ -675,35 +676,37 @@ app.delete("/pdf/:collectionName", clerk_middleware_js_1.clerkAuth, (req, res) =
             console.log("User not found");
             return res.status(404).json({
                 success: false,
-                error: "User not found"
+                error: "User not found",
             });
         }
         // 2. Find and validate PDF ownership
         const pdfToDelete = yield pdf_model_js_1.default.findOne({
             collectionName,
-            userId: user._id
+            userId: user._id,
         });
         if (!pdfToDelete) {
             console.log(`PDF not found or not owned by user: ${collectionName}`);
             return res.status(404).json({
                 success: false,
-                error: "PDF not found or not owned by user"
+                error: "PDF not found or not owned by user",
             });
         }
         console.log(`Found PDF to delete: ${pdfToDelete.originalFilename}`);
         // 3. Check remaining PDFs count BEFORE deletion
-        const totalPDFsBeforeDeletion = yield pdf_model_js_1.default.countDocuments({ userId: user._id });
+        const totalPDFsBeforeDeletion = yield pdf_model_js_1.default.countDocuments({
+            userId: user._id,
+        });
         const isLastPDF = totalPDFsBeforeDeletion === 1;
         // 4. Delete from database first (this is the critical operation)
         const deletedPDF = yield pdf_model_js_1.default.findOneAndDelete({
             collectionName,
-            userId: user._id
+            userId: user._id,
         });
         if (!deletedPDF) {
             console.log("Failed to delete from database");
             return res.status(500).json({
                 success: false,
-                error: "Failed to delete PDF from database"
+                error: "Failed to delete PDF from database",
             });
         }
         console.log(`Successfully deleted from database: ${deletedPDF.originalFilename}`);
@@ -712,7 +715,7 @@ app.delete("/pdf/:collectionName", clerk_middleware_js_1.clerkAuth, (req, res) =
             try {
                 const deletedChatMessages = yield chat_model_1.default.deleteMany({
                     userId: user._id,
-                    collectionName: null // These are "All PDFs" messages
+                    collectionName: null, // These are "All PDFs" messages
                 });
                 console.log(`Deleted ${deletedChatMessages.deletedCount} "All PDFs" chat messages`);
             }
@@ -725,7 +728,7 @@ app.delete("/pdf/:collectionName", clerk_middleware_js_1.clerkAuth, (req, res) =
         try {
             const deletedSpecificChats = yield chat_model_1.default.deleteMany({
                 userId: user._id,
-                collectionName: collectionName
+                collectionName: collectionName,
             });
             console.log(`Deleted ${deletedSpecificChats.deletedCount} specific PDF chat messages`);
         }
@@ -738,7 +741,7 @@ app.delete("/pdf/:collectionName", clerk_middleware_js_1.clerkAuth, (req, res) =
             success: true,
             message: "PDF deleted successfully",
             wasLastPDF: isLastPDF,
-            deletedCollection: collectionName
+            deletedCollection: collectionName,
         });
         // 8. Background cleanup operations (don't await - let them run async)
         setImmediate(() => __awaiter(void 0, void 0, void 0, function* () {
@@ -774,7 +777,7 @@ app.delete("/pdf/:collectionName", clerk_middleware_js_1.clerkAuth, (req, res) =
         console.error("PDF deletion error:", error);
         res.status(500).json({
             success: false,
-            error: "Internal server error while deleting PDF"
+            error: "Internal server error while deleting PDF",
         });
     }
 }));

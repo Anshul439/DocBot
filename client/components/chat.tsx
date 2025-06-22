@@ -15,6 +15,9 @@ interface ChatComponentProps {
   ) => void;
   availablePDFs: IPDF[];
   hasPDFs: boolean;
+  // Add loading states as props
+  loadingStates: Record<string, boolean>;
+  setLoadingStates: (states: Record<string, boolean>) => void;
 }
 
 const ChatComponent: React.FC<ChatComponentProps> = ({
@@ -23,14 +26,19 @@ const ChatComponent: React.FC<ChatComponentProps> = ({
   updateChatHistory,
   availablePDFs,
   hasPDFs,
+  loadingStates,
+  setLoadingStates,
 }) => {
   const [message, setMessage] = useState<string>("");
-  const [loading, setLoading] = useState<boolean>(false);
   const [showAuthPrompt, setShowAuthPrompt] = useState<boolean>(false);
   const [isInitialLoad, setIsInitialLoad] = useState<boolean>(true);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const { isSignedIn, getToken } = useAuth();
+
+  // Get the current chat's loading state
+  const currentChatKey = selectedPDF || "all";
+  const loading = loadingStates[currentChatKey] || false;
 
   const formatTime = (): string => {
     const now = new Date();
@@ -91,6 +99,13 @@ const ChatComponent: React.FC<ChatComponentProps> = ({
       .replace(/\n\n/g, "<br /><br />");
   };
 
+  const setCurrentChatLoading = (isLoading: boolean): void => {
+    setLoadingStates({
+      ...loadingStates,
+      [currentChatKey]: isLoading,
+    });
+  };
+
   const handleSendMessage = async (): Promise<void> => {
     if (!message.trim() || loading) return;
 
@@ -108,7 +123,7 @@ const ChatComponent: React.FC<ChatComponentProps> = ({
     const updatedHistory = [...chatHistory, userMessage];
     updateChatHistory(selectedPDF, updatedHistory);
     setMessage("");
-    setLoading(true);
+    setCurrentChatLoading(true);
 
     try {
       const token = await getToken();
@@ -159,7 +174,7 @@ const ChatComponent: React.FC<ChatComponentProps> = ({
       };
       updateChatHistory(selectedPDF, [...updatedHistory, errorMessage]);
     } finally {
-      setLoading(false);
+      setCurrentChatLoading(false);
     }
   };
 
