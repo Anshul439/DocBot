@@ -8,7 +8,7 @@ interface PDFListComponentProps {
   pdfs: IPDF[];
   selectedPDF: string | null;
   setSelectedPDF: (collectionName: string | null) => void;
-  onRefresh: () => void;
+    onRefresh: (updatedPDFs?: IPDF[]) => void;
 }
 
 const PDFListComponent: React.FC<PDFListComponentProps> = ({
@@ -26,9 +26,9 @@ const handleDeletePDF = async (
   event.stopPropagation();
 
   try {
-    // Optimistic UI update - remove the PDF from local state immediately
+    // Optimistic UI update
     const updatedPDFs = pdfs.filter(pdf => pdf.collectionName !== collectionName);
-    onRefresh(updatedPDFs); // You'll need to modify your onRefresh prop to accept updated PDFs
+    onRefresh(updatedPDFs); // Pass the updated list
 
     const token = await getToken();
     const response = await fetch(
@@ -44,18 +44,17 @@ const handleDeletePDF = async (
     const data = await response.json();
 
     if (!data.success) {
-      // If the deletion failed, revert the UI
-      onRefresh(); // This would refetch the actual state
+      // If deletion failed, refetch the actual state
+      onRefresh(); // Call without parameters to trigger full refresh
       throw new Error(data.error || "Failed to delete PDF");
     }
 
-    // Handle switching selection if needed
     if (selectedPDF === collectionName) {
       setSelectedPDF(null);
     }
   } catch (error) {
     console.error("Error deleting PDF:", error);
-    // You might want to show a toast notification here
+    onRefresh(); // Fallback refresh if something went wrong
   }
 };
 
