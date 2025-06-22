@@ -29,7 +29,7 @@ const fetchAvailablePDFs = useCallback(async (): Promise<void> => {
 
   try {
     const token = await getToken();
-    const response = await fetch(`${process.env.ROOT_URL}/pdfs`, {
+    const response = await fetch(`${process.env.NEXT_PUBLIC_ROOT_URL}/pdfs`, {
       headers: {
         Authorization: `Bearer ${token}`,
       },
@@ -100,7 +100,7 @@ const fetchAvailablePDFs = useCallback(async (): Promise<void> => {
       }
 
       const response = await fetch(
-        `${process.env.ROOT_URL}/chat/history?collectionName=${collectionName || ""}`,
+        `${process.env.NEXT_PUBLIC_ROOT_URL}/chat/history?collectionName=${collectionName || ""}`,
         {
           headers: {
             Authorization: `Bearer ${token}`,

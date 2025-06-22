@@ -39,7 +39,7 @@ const PDFListComponent: React.FC<PDFListComponentProps> = ({
       }
 
       const response = await fetch(
-        `${process.env.ROOT_URL}/pdf/${collectionName}`,
+        `${process.env.NEXT_PUBLIC_ROOT_URL}/pdf/${collectionName}`,
         {
           method: "DELETE",
           headers: {
