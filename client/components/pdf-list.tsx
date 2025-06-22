@@ -8,7 +8,7 @@ interface PDFListComponentProps {
   pdfs: IPDF[];
   selectedPDF: string | null;
   setSelectedPDF: (collectionName: string | null) => void;
-    onRefresh: (updatedPDFs?: IPDF[]) => void;
+  onRefresh: (updatedPDFs?: IPDF[]) => void;
 }
 
 const PDFListComponent: React.FC<PDFListComponentProps> = ({
@@ -19,44 +19,69 @@ const PDFListComponent: React.FC<PDFListComponentProps> = ({
 }) => {
   const { getToken } = useAuth();
 
-const handleDeletePDF = async (
-  collectionName: string,
-  event: React.MouseEvent
-) => {
-  event.stopPropagation();
+  const handleDeletePDF = async (
+    collectionName: string,
+    event: React.MouseEvent
+  ) => {
+    event.stopPropagation();
 
-  try {
-    // Optimistic UI update
-    const updatedPDFs = pdfs.filter(pdf => pdf.collectionName !== collectionName);
-    onRefresh(updatedPDFs); // Pass the updated list
+    // Prevent multiple clicks
+    const button = event.currentTarget as HTMLButtonElement;
+    if (button.disabled) return;
+    
+    button.disabled = true;
+    button.classList.add('opacity-50', 'cursor-not-allowed');
 
-    const token = await getToken();
-    const response = await fetch(
-      `http://localhost:8000/pdf/${collectionName}`,
-      {
-        method: "DELETE",
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
+    try {
+      const token = await getToken();
+      if (!token) {
+        throw new Error("Authentication required");
       }
-    );
 
-    const data = await response.json();
+      const response = await fetch(
+        `http://localhost:8000/pdf/${collectionName}`,
+        {
+          method: "DELETE",
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
 
-    if (!data.success) {
-      // If deletion failed, refetch the actual state
-      onRefresh(); // Call without parameters to trigger full refresh
-      throw new Error(data.error || "Failed to delete PDF");
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || `HTTP ${response.status}: Failed to delete PDF`);
+      }
+
+      // Success: Update UI state
+      const updatedPDFs = pdfs.filter(pdf => pdf.collectionName !== collectionName);
+      
+      // If the deleted PDF was selected, clear selection
+      if (selectedPDF === collectionName) {
+        setSelectedPDF(null);
+      }
+      
+      // Update the PDF list
+      onRefresh(updatedPDFs);
+
+      console.log(`Successfully deleted PDF: ${collectionName}`);
+
+    } catch (error) {
+      console.error("Error deleting PDF:", error);
+      
+      // Show user-friendly error message
+      const errorMessage = error instanceof Error ? error.message : "Failed to delete PDF";
+      alert(`Error: ${errorMessage}`);
+      
+      // Re-enable button
+      button.disabled = false;
+      button.classList.remove('opacity-50', 'cursor-not-allowed');
+      
+      // Refresh to get current state from server
+      onRefresh();
     }
-
-    if (selectedPDF === collectionName) {
-      setSelectedPDF(null);
-    }
-  } catch (error) {
-    console.error("Error deleting PDF:", error);
-    onRefresh(); // Fallback refresh if something went wrong
-  }
-};
+  };
 
   if (!pdfs || pdfs.length === 0) {
     return (
@@ -103,7 +128,7 @@ const handleDeletePDF = async (
               </div>
               <button
                 onClick={(e) => handleDeletePDF(pdf.collectionName, e)}
-                className="ml-2 p-1 md:p-1.5 text-inherit opacity-60 hover:opacity-100 rounded hover:bg-black hover:bg-opacity-20"
+                className="ml-2 p-1 md:p-1.5 text-inherit opacity-60 hover:opacity-100 rounded hover:bg-black hover:bg-opacity-20 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
                 title="Delete PDF"
               >
                 <Trash2Icon size={14} className="md:w-4 md:h-4" />

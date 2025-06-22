@@ -668,60 +668,117 @@ app.delete("/pdf/:collectionName", clerk_middleware_js_1.clerkAuth, (req, res) =
     try {
         const { collectionName } = req.params;
         const clerkUserId = req.auth.userId;
-        // 1. First validate user and PDF ownership (fast operation)
+        console.log(`Delete request for collection: ${collectionName}, user: ${clerkUserId}`);
+        // 1. Find user first
         const user = yield user_model_js_1.default.findOne({ clerkId: clerkUserId });
         if (!user) {
-            return res.status(404).json({ success: false, error: "User not found" });
+            console.log("User not found");
+            return res.status(404).json({
+                success: false,
+                error: "User not found"
+            });
         }
-        // 2. Immediately mark as deleted in MongoDB (fast operation)
-        const deletedPDF = yield pdf_model_js_1.default.findOneAndDelete({
+        // 2. Find and validate PDF ownership
+        const pdfToDelete = yield pdf_model_js_1.default.findOne({
             collectionName,
             userId: user._id
         });
-        if (!deletedPDF) {
+        if (!pdfToDelete) {
+            console.log(`PDF not found or not owned by user: ${collectionName}`);
             return res.status(404).json({
                 success: false,
                 error: "PDF not found or not owned by user"
             });
         }
-        // 3. Respond to client immediately
+        console.log(`Found PDF to delete: ${pdfToDelete.originalFilename}`);
+        // 3. Check remaining PDFs count BEFORE deletion
+        const totalPDFsBeforeDeletion = yield pdf_model_js_1.default.countDocuments({ userId: user._id });
+        const isLastPDF = totalPDFsBeforeDeletion === 1;
+        // 4. Delete from database first (this is the critical operation)
+        const deletedPDF = yield pdf_model_js_1.default.findOneAndDelete({
+            collectionName,
+            userId: user._id
+        });
+        if (!deletedPDF) {
+            console.log("Failed to delete from database");
+            return res.status(500).json({
+                success: false,
+                error: "Failed to delete PDF from database"
+            });
+        }
+        console.log(`Successfully deleted from database: ${deletedPDF.originalFilename}`);
+        // 5. If this was the last PDF, delete "All PDFs" chat messages
+        if (isLastPDF) {
+            try {
+                const deletedChatMessages = yield chat_model_1.default.deleteMany({
+                    userId: user._id,
+                    collectionName: null // These are "All PDFs" messages
+                });
+                console.log(`Deleted ${deletedChatMessages.deletedCount} "All PDFs" chat messages`);
+            }
+            catch (chatError) {
+                console.error("Error deleting All PDFs chat messages:", chatError);
+                // Don't fail the whole operation for this
+            }
+        }
+        // 6. Delete specific PDF chat messages
+        try {
+            const deletedSpecificChats = yield chat_model_1.default.deleteMany({
+                userId: user._id,
+                collectionName: collectionName
+            });
+            console.log(`Deleted ${deletedSpecificChats.deletedCount} specific PDF chat messages`);
+        }
+        catch (chatError) {
+            console.error("Error deleting specific PDF chat messages:", chatError);
+            // Don't fail the whole operation for this
+        }
+        // 7. Respond to client immediately with success
         res.json({
             success: true,
-            message: "PDF deleted successfully"
+            message: "PDF deleted successfully",
+            wasLastPDF: isLastPDF,
+            deletedCollection: collectionName
         });
-        // 4. Process slower deletion operations after response
-        // (These won't block the response)
-        try {
-            // Delete file system file
-            if (fs_1.default.existsSync(deletedPDF.filePath)) {
-                fs_1.default.unlink(deletedPDF.filePath, (err) => {
-                    if (err)
-                        console.error("File deletion error:", err);
-                    else
-                        console.log("File deleted:", deletedPDF.filePath);
-                });
+        // 8. Background cleanup operations (don't await - let them run async)
+        setImmediate(() => __awaiter(void 0, void 0, void 0, function* () {
+            try {
+                // Delete file system file
+                if (deletedPDF.filePath && fs_1.default.existsSync(deletedPDF.filePath)) {
+                    fs_1.default.unlink(deletedPDF.filePath, (err) => {
+                        if (err) {
+                            console.error(`File deletion error for ${deletedPDF.filePath}:`, err);
+                        }
+                        else {
+                            console.log(`File deleted: ${deletedPDF.filePath}`);
+                        }
+                    });
+                }
+                // Delete Qdrant collection
+                try {
+                    yield qdrantClient.deleteCollection(collectionName);
+                    console.log(`Qdrant collection deleted: ${collectionName}`);
+                }
+                catch (qdrantError) {
+                    console.error(`Qdrant deletion error for ${collectionName}:`, qdrantError);
+                    // You might want to implement a retry mechanism or cleanup job here
+                }
             }
-            // Delete Qdrant collection
-            qdrantClient.deleteCollection(collectionName)
-                .then(() => console.log("Qdrant collection deleted"))
-                .catch(err => console.error("Qdrant deletion error:", err));
-        }
-        catch (bgError) {
-            console.error("Background cleanup error:", bgError);
-            // You might want to log this to an error tracking system
-            // Optionally retry or implement a cleanup job later
-        }
+            catch (bgError) {
+                console.error("Background cleanup error:", bgError);
+                // Log to your error tracking system if you have one
+            }
+        }));
     }
     catch (error) {
         console.error("PDF deletion error:", error);
         res.status(500).json({
             success: false,
-            error: "Failed to delete PDF"
+            error: "Internal server error while deleting PDF"
         });
     }
 }));
 // Get chat history endpoint
-// Get chat history endpoint - REPLACE the existing one
 app.get("/chat/history", clerk_middleware_js_1.clerkAuth, (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const { collectionName, limit } = req.query;
