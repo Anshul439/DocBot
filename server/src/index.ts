@@ -19,6 +19,7 @@ import mongoose from "mongoose";
 import PDFMetadata from "./models/pdf.model.js";
 import ChatMessage from "./models/chat.model";
 import { clerkAuth } from "./middlewares/clerk.middleware.js";
+import User from "./models/user.model.js";
 
 interface PDFData {
   filename: string;
@@ -117,6 +118,7 @@ const worker = new Worker(
     try {
       console.log("Processing job:", job.data);
       const data = JSON.parse(job.data);
+      const userId = new mongoose.Types.ObjectId(data.userId);
 
       // Extract filename without extension to use as part of collection name
       const parsedPath = path.parse(data.path);
@@ -187,13 +189,13 @@ const worker = new Worker(
       );
 
       const pdfMetadata = new PDFMetadata({
+        userId: userId,
         originalFilename: data.filename,
         collectionName: collectionName,
         uploadTime: new Date(),
         chunks: splitDocs.length,
         filePath: data.path,
       });
-
       await pdfMetadata.save();
       console.log(
         `Successfully saved PDF metadata to MongoDB: ${collectionName}`
@@ -261,6 +263,7 @@ app.get("/", (req: Request, res: Response) => {
 // Upload endpoint
 app.post(
   "/upload/pdf",
+  clerkAuth,
   upload.single("pdf"),
   async (req: Request, res: Response): Promise<void> => {
     if (!req.file) {
@@ -268,40 +271,76 @@ app.post(
       return;
     }
 
-    // Add to queue for processing
-    const job = await queue.add(
-      "file",
-      JSON.stringify({
-        filename: req.file.originalname,
-        destination: req.file.destination,
-        path: req.file.path,
-      })
-    );
+    const clerkUserId = (req as any).auth.userId;
+    
+    try {
+      // Find or create the user in your MongoDB
+      const user = await User.findOneAndUpdate(
+        { clerkId: clerkUserId },
+        {},
+        { upsert: true, new: true }
+      );
 
-    res.json({
-      success: true,
-      message: "PDF uploaded and being processed",
-      jobId: job.id,
-    });
+      // Add to queue for processing with user ID
+      const job = await queue.add(
+        "file",
+        JSON.stringify({
+          userId: user._id, // Store MongoDB user ID
+          clerkId: clerkUserId, // Also store Clerk ID if needed
+          filename: req.file.originalname,
+          destination: req.file.destination,
+          path: req.file.path,
+        })
+      );
+
+      res.json({
+        success: true,
+        message: "PDF uploaded and being processed",
+        jobId: job.id,
+      });
+    } catch (error) {
+      console.error("Error processing upload:", error);
+      res.status(500).json({
+        success: false,
+        error: "Failed to process upload",
+      });
+    }
   }
 );
 
-// Get all available PDFs (now returns session PDFs only)
-app.get("/pdfs", async (req: Request, res: Response): Promise<void> => {
-  try {
-    const pdfs = await PDFMetadata.find().sort({ uploadTime: -1 });
-    res.json({
-      success: true,
-      pdfs: pdfs,
-    });
-  } catch (error) {
-    console.error("Error fetching PDFs:", error);
-    res.status(500).json({
-      success: false,
-      error: "Failed to fetch PDF list",
-    });
+// Get all available PDFs for the current user
+app.get(
+  "/pdfs",
+  clerkAuth,
+  async (req: Request, res: Response): Promise<void> => {
+    try {
+      const clerkUserId = (req as any).auth.userId;
+
+      // Find the user in MongoDB
+      const user = await User.findOne({ clerkId: clerkUserId });
+      if (!user) {
+        res.json({ success: true, pdfs: [] }); // No user means no PDFs
+        return;
+      }
+
+      // Find PDFs associated with this user
+      const pdfs = await PDFMetadata.find({ userId: user._id })
+        .sort({ uploadTime: -1 })
+        .populate("userId", "name email"); // Optional: populate user info
+
+      res.json({
+        success: true,
+        pdfs: pdfs,
+      });
+    } catch (error) {
+      console.error("Error fetching PDFs:", error);
+      res.status(500).json({
+        success: false,
+        error: "Failed to fetch PDF list",
+      });
+    }
   }
-});
+);
 
 // Helper function to detect summary requests
 function isSummaryRequest(query: string): boolean {
@@ -484,6 +523,7 @@ async function getComprehensiveContent(
 }
 
 // Enhanced chat endpoint with complete functionality
+// Enhanced chat endpoint with complete functionality - REPLACE the existing chat endpoint
 app.get(
   "/chat",
   clerkAuth,
@@ -491,7 +531,7 @@ app.get(
     try {
       const userQuery = req.query.message as string;
       const collectionName = req.query.collection as string;
-      const userId = (req as any).auth.userId;
+      const clerkUserId = (req as any).auth.userId;
 
       if (!userQuery) {
         res.status(400).json({
@@ -501,10 +541,20 @@ app.get(
         return;
       }
 
+      // Find the user in MongoDB using Clerk ID
+      const user = await User.findOne({ clerkId: clerkUserId });
+      if (!user) {
+        res.status(404).json({
+          success: false,
+          error: "User not found",
+        });
+        return;
+      }
+
       // Save user message to history
       try {
         await ChatMessage.create({
-          userId: userId,
+          userId: user._id, // Use MongoDB user ID
           collectionName: collectionName || null,
           role: "user",
           content: userQuery,
@@ -522,7 +572,10 @@ app.get(
 
       let collectionsToSearch: string[] = [];
       if (collectionName) {
-        const pdf = await PDFMetadata.findOne({ collectionName });
+        const pdf = await PDFMetadata.findOne({ 
+          collectionName,
+          userId: user._id // Ensure PDF belongs to user
+        });
         if (!pdf) {
           res.json({
             success: false,
@@ -533,8 +586,9 @@ app.get(
         }
         collectionsToSearch = [collectionName];
       } else {
-        const allPDFs = await PDFMetadata.find();
-        collectionsToSearch = allPDFs.map((pdf) => pdf.collectionName);
+        // Get all PDFs for this specific user
+        const userPDFs = await PDFMetadata.find({ userId: user._id });
+        collectionsToSearch = userPDFs.map((pdf) => pdf.collectionName);
 
         if (collectionsToSearch.length === 0) {
           res.json({
@@ -565,7 +619,6 @@ app.get(
           collectionsToSearch,
           embeddings
         );
-        // console.log(comprehensiveContent);
 
         if (comprehensiveContent.length === 0) {
           responseText =
@@ -642,7 +695,6 @@ Please provide a comprehensive summary:`;
             );
 
             const docs = await vectorStore.similaritySearch(userQuery, 4);
-            // console.log("DOCS", docs);
 
             if (docs.length > 0) {
               let originalFilename = collection;
@@ -651,6 +703,15 @@ Please provide a comprehensive summary:`;
               );
               if (pdfMetadata) {
                 originalFilename = pdfMetadata.originalFilename;
+              } else {
+                // Fallback: get from database
+                const dbPdf = await PDFMetadata.findOne({ 
+                  collectionName: collection,
+                  userId: user._id 
+                });
+                if (dbPdf) {
+                  originalFilename = dbPdf.originalFilename;
+                }
               }
 
               const docsWithCollection = docs.map((doc) => ({
@@ -663,7 +724,6 @@ Please provide a comprehensive summary:`;
               }));
 
               allRelevantDocs.push(...docsWithCollection);
-              // console.log("ARD", allRelevantDocs);
 
               searchResults.push({
                 collection,
@@ -725,7 +785,7 @@ Please provide a detailed answer based on the information in the documents:`;
       // Save assistant response to history
       try {
         await ChatMessage.create({
-          userId: userId,
+          userId: user._id, // Use MongoDB user ID
           collectionName: collectionName || null,
           role: "assistant",
           content: responseText,
@@ -787,129 +847,109 @@ app.get("/job/:id", async (req: Request, res: Response): Promise<void> => {
 });
 
 // Delete PDF endpoint
+// Delete PDF endpoint - REPLACE the existing one
 app.delete(
   "/pdf/:collectionName",
+  clerkAuth,
   async (req: Request, res: Response): Promise<void> => {
     try {
       const { collectionName } = req.params;
+      console.log("Attempting to delete collection:", collectionName);
+      
+      const clerkUserId = (req as any).auth.userId;
 
-      // Find and delete from MongoDB
-      const deletedPDF = await PDFMetadata.findOneAndDelete({ collectionName });
+      // First find the user in MongoDB using Clerk ID
+      const user = await User.findOne({ clerkId: clerkUserId });
+      if (!user) {
+        res.status(404).json({
+          success: false,
+          error: "User not found",
+        });
+        return;
+      }
+
+      // Find and delete PDF using the MongoDB user ID
+      const deletedPDF = await PDFMetadata.findOneAndDelete({
+        collectionName,
+        userId: user._id // Use MongoDB user ID, not Clerk ID
+      });
 
       if (!deletedPDF) {
         res.status(404).json({
           success: false,
-          error: "PDF not found",
+          error: "PDF not found or not owned by user",
         });
         return;
+      }
+
+      console.log("Found PDF to delete:", deletedPDF.originalFilename);
+
+      // Delete the file from the filesystem
+      try {
+        if (fs.existsSync(deletedPDF.filePath)) {
+          fs.unlinkSync(deletedPDF.filePath);
+          console.log(`Deleted file: ${deletedPDF.filePath}`);
+        }
+      } catch (fileError) {
+        console.error("Error deleting file:", fileError);
       }
 
       // Delete the collection from Qdrant
       try {
         await qdrantClient.deleteCollection(collectionName);
-        console.log(`Collection ${collectionName} deleted successfully`);
-      } catch (collectionError) {
-        console.error(
-          `Error deleting collection ${collectionName}:`,
-          collectionError
-        );
-      }
-
-      // Delete the physical file
-      try {
-        if (deletedPDF.filePath && fs.existsSync(deletedPDF.filePath)) {
-          fs.unlinkSync(deletedPDF.filePath);
-          console.log(`Deleted file: ${deletedPDF.filePath}`);
-        }
-      } catch (fileError) {
-        console.error(`Error deleting file ${deletedPDF.filePath}:`, fileError);
-      }
-
-      // Delete all chat history associated with this specific collection
-      try {
-        const specificDeleteResult = await ChatMessage.deleteMany({
-          collectionName: collectionName,
-        });
-        console.log(
-          `Deleted ${specificDeleteResult.deletedCount} specific chat messages for collection ${collectionName}`
-        );
-      } catch (specificChatDeleteError) {
-        console.error(
-          `Error deleting specific chat history for collection ${collectionName}:`,
-          specificChatDeleteError
-        );
-      }
-
-      // Delete all general chat history (where collectionName is null)
-      try {
-        const generalDeleteResult = await ChatMessage.deleteMany({
-          collectionName: null,
-        });
-        console.log(
-          `Deleted ${generalDeleteResult.deletedCount} general chat messages`
-        );
-      } catch (generalChatDeleteError) {
-        console.error(
-          `Error deleting general chat history:`,
-          generalChatDeleteError
-        );
+        console.log(`Deleted Qdrant collection: ${collectionName}`);
+      } catch (qdrantError) {
+        console.error("Error deleting Qdrant collection:", qdrantError);
       }
 
       res.json({
         success: true,
-        message: `PDF ${collectionName}, its specific chat history, and all general chat history deleted successfully`,
+        message: "PDF and associated data deleted successfully",
       });
     } catch (error) {
       console.error("Error deleting PDF:", error);
       res.status(500).json({
         success: false,
-        error: "Failed to delete PDF and related chat history",
+        error: "Failed to delete PDF",
       });
     }
   }
 );
 
 // Get chat history endpoint
-app.get(
-  "/chat/history",
-  clerkAuth,
-  async (req: Request, res: Response): Promise<void> => {
-    try {
-      const { collectionName, limit } = req.query;
-      const userId = (req as any).auth.userId;
+// Get chat history endpoint - REPLACE the existing one
+app.get("/chat/history", clerkAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { collectionName, limit } = req.query;
+    const clerkUserId = (req as any).auth.userId;
 
-      if (!userId) {
-        res.status(401).json({
-          success: false,
-          error: "Authentication required",
-        });
-        return;
-      }
-
-      const query: any = { userId };
-      if (collectionName) {
-        query.collectionName = collectionName;
-      } else {
-        query.collectionName = null; // For "all PDFs" chat
-      }
-
-      const messages = await ChatMessage.find(query)
-        .sort({ timestamp: 1 })
-        .limit(parseInt(limit as string) || 50);
-
-      res.json({
-        success: true,
-        messages,
-      });
-    } catch (error) {
-      console.error("Error fetching chat history:", error);
-      res.status(500).json({
-        success: false,
-        error: "Failed to fetch chat history",
-      });
+    // First find the user in MongoDB using Clerk ID
+    const user = await User.findOne({ clerkId: clerkUserId });
+    if (!user) {
+      res.json({ success: true, messages: [] }); // No user means no messages
+      return;
     }
+
+    const query: any = { userId: user._id }; // Use MongoDB user ID
+    if (collectionName) {
+      query.collectionName = collectionName;
+    } else {
+      query.collectionName = null;
+    }
+
+    const messages = await ChatMessage.find(query)
+      .sort({ timestamp: 1 })
+      .limit(parseInt(limit as string) || 50);
+
+    res.json({ success: true, messages });
+  } catch (error) {
+    console.error("Error fetching chat history:", error);
+    res.status(500).json({
+      success: false,
+      error: "Failed to fetch chat history",
+    });
   }
-);
+});
 
 const PORT = process.env.PORT || 8000;
 

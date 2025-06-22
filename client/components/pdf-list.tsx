@@ -36,20 +36,23 @@ const PDFListComponent: React.FC<PDFListComponentProps> = ({
           },
         }
       );
+      console.log(response);
+      
 
       const data = await response.json();
 
       if (data.success) {
-        onRefresh();
+  onRefresh();
 
-        if (pdfs.length === 1) {
-          setSelectedPDF(null);
-        }
-
-        if (selectedPDF === collectionName) {
-          setSelectedPDF(null);
-        }
-      }
+  // If this was the last PDF, clear selection
+  if (pdfs.length === 1) {
+    setSelectedPDF(null);
+  }
+  // If the deleted PDF was selected, switch to "All PDFs"
+  else if (selectedPDF === collectionName) {
+    setSelectedPDF(null);
+  }
+}
     } catch (error) {
       console.error("Error deleting PDF:", error);
     }

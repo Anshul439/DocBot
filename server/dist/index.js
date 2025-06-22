@@ -32,6 +32,7 @@ const mongoose_1 = __importDefault(require("mongoose"));
 const pdf_model_js_1 = __importDefault(require("./models/pdf.model.js"));
 const chat_model_1 = __importDefault(require("./models/chat.model"));
 const clerk_middleware_js_1 = require("./middlewares/clerk.middleware.js");
+const user_model_js_1 = __importDefault(require("./models/user.model.js"));
 const genAI = new generative_ai_1.GoogleGenerativeAI(process.env.GOOGLE_API_KEY);
 // Initialize Qdrant client
 const qdrantClient = new js_client_rest_1.QdrantClient({
@@ -90,6 +91,7 @@ const worker = new bullmq_1.Worker("file-upload-queue", (job) => __awaiter(void 
     try {
         console.log("Processing job:", job.data);
         const data = JSON.parse(job.data);
+        const userId = new mongoose_1.default.Types.ObjectId(data.userId);
         // Extract filename without extension to use as part of collection name
         const parsedPath = path_1.default.parse(data.path);
         const baseFilename = parsedPath.name;
@@ -140,6 +142,7 @@ const worker = new bullmq_1.Worker("file-upload-queue", (job) => __awaiter(void 
         yield vectorStore.addDocuments(splitDocs);
         console.log(`Successfully added ${splitDocs.length} chunks to collection: ${collectionName}`);
         const pdfMetadata = new pdf_model_js_1.default({
+            userId: userId,
             originalFilename: data.filename,
             collectionName: collectionName,
             uploadTime: new Date(),
@@ -200,27 +203,51 @@ app.get("/", (req, res) => {
     res.json({ status: "ok", message: "PDF Chat API is running" });
 });
 // Upload endpoint
-app.post("/upload/pdf", upload.single("pdf"), (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+app.post("/upload/pdf", clerk_middleware_js_1.clerkAuth, upload.single("pdf"), (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     if (!req.file) {
         res.status(400).json({ success: false, message: "No file uploaded" });
         return;
     }
-    // Add to queue for processing
-    const job = yield queue.add("file", JSON.stringify({
-        filename: req.file.originalname,
-        destination: req.file.destination,
-        path: req.file.path,
-    }));
-    res.json({
-        success: true,
-        message: "PDF uploaded and being processed",
-        jobId: job.id,
-    });
-}));
-// Get all available PDFs (now returns session PDFs only)
-app.get("/pdfs", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const clerkUserId = req.auth.userId;
     try {
-        const pdfs = yield pdf_model_js_1.default.find().sort({ uploadTime: -1 });
+        // Find or create the user in your MongoDB
+        const user = yield user_model_js_1.default.findOneAndUpdate({ clerkId: clerkUserId }, {}, { upsert: true, new: true });
+        // Add to queue for processing with user ID
+        const job = yield queue.add("file", JSON.stringify({
+            userId: user._id, // Store MongoDB user ID
+            clerkId: clerkUserId, // Also store Clerk ID if needed
+            filename: req.file.originalname,
+            destination: req.file.destination,
+            path: req.file.path,
+        }));
+        res.json({
+            success: true,
+            message: "PDF uploaded and being processed",
+            jobId: job.id,
+        });
+    }
+    catch (error) {
+        console.error("Error processing upload:", error);
+        res.status(500).json({
+            success: false,
+            error: "Failed to process upload",
+        });
+    }
+}));
+// Get all available PDFs for the current user
+app.get("/pdfs", clerk_middleware_js_1.clerkAuth, (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const clerkUserId = req.auth.userId;
+        // Find the user in MongoDB
+        const user = yield user_model_js_1.default.findOne({ clerkId: clerkUserId });
+        if (!user) {
+            res.json({ success: true, pdfs: [] }); // No user means no PDFs
+            return;
+        }
+        // Find PDFs associated with this user
+        const pdfs = yield pdf_model_js_1.default.find({ userId: user._id })
+            .sort({ uploadTime: -1 })
+            .populate("userId", "name email"); // Optional: populate user info
         res.json({
             success: true,
             pdfs: pdfs,
@@ -367,11 +394,12 @@ function getComprehensiveContent(collectionsToSearch, embeddings) {
     });
 }
 // Enhanced chat endpoint with complete functionality
+// Enhanced chat endpoint with complete functionality - REPLACE the existing chat endpoint
 app.get("/chat", clerk_middleware_js_1.clerkAuth, (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const userQuery = req.query.message;
         const collectionName = req.query.collection;
-        const userId = req.auth.userId;
+        const clerkUserId = req.auth.userId;
         if (!userQuery) {
             res.status(400).json({
                 error: "Message parameter is required",
@@ -379,10 +407,19 @@ app.get("/chat", clerk_middleware_js_1.clerkAuth, (req, res) => __awaiter(void 0
             });
             return;
         }
+        // Find the user in MongoDB using Clerk ID
+        const user = yield user_model_js_1.default.findOne({ clerkId: clerkUserId });
+        if (!user) {
+            res.status(404).json({
+                success: false,
+                error: "User not found",
+            });
+            return;
+        }
         // Save user message to history
         try {
             yield chat_model_1.default.create({
-                userId: userId,
+                userId: user._id, // Use MongoDB user ID
                 collectionName: collectionName || null,
                 role: "user",
                 content: userQuery,
@@ -395,7 +432,10 @@ app.get("/chat", clerk_middleware_js_1.clerkAuth, (req, res) => __awaiter(void 0
         console.log(`Processing query: "${userQuery}" for collection: ${collectionName || "all"}`);
         let collectionsToSearch = [];
         if (collectionName) {
-            const pdf = yield pdf_model_js_1.default.findOne({ collectionName });
+            const pdf = yield pdf_model_js_1.default.findOne({
+                collectionName,
+                userId: user._id // Ensure PDF belongs to user
+            });
             if (!pdf) {
                 res.json({
                     success: false,
@@ -407,8 +447,9 @@ app.get("/chat", clerk_middleware_js_1.clerkAuth, (req, res) => __awaiter(void 0
             collectionsToSearch = [collectionName];
         }
         else {
-            const allPDFs = yield pdf_model_js_1.default.find();
-            collectionsToSearch = allPDFs.map((pdf) => pdf.collectionName);
+            // Get all PDFs for this specific user
+            const userPDFs = yield pdf_model_js_1.default.find({ userId: user._id });
+            collectionsToSearch = userPDFs.map((pdf) => pdf.collectionName);
             if (collectionsToSearch.length === 0) {
                 res.json({
                     success: false,
@@ -431,7 +472,6 @@ app.get("/chat", clerk_middleware_js_1.clerkAuth, (req, res) => __awaiter(void 0
             console.log(`Detected summary request`);
             isSummaryResponse = true;
             const comprehensiveContent = yield getComprehensiveContent(collectionsToSearch, embeddings);
-            // console.log(comprehensiveContent);
             if (comprehensiveContent.length === 0) {
                 responseText =
                     "I couldn't find sufficient content in the uploaded PDFs to create a summary.";
@@ -495,16 +535,24 @@ Please provide a comprehensive summary:`;
                         collectionName: collection,
                     });
                     const docs = yield vectorStore.similaritySearch(userQuery, 4);
-                    // console.log("DOCS", docs);
                     if (docs.length > 0) {
                         let originalFilename = collection;
                         const pdfMetadata = sessionPDFs.find((pdf) => pdf.collectionName === collection);
                         if (pdfMetadata) {
                             originalFilename = pdfMetadata.originalFilename;
                         }
+                        else {
+                            // Fallback: get from database
+                            const dbPdf = yield pdf_model_js_1.default.findOne({
+                                collectionName: collection,
+                                userId: user._id
+                            });
+                            if (dbPdf) {
+                                originalFilename = dbPdf.originalFilename;
+                            }
+                        }
                         const docsWithCollection = docs.map((doc) => (Object.assign(Object.assign({}, doc), { metadata: Object.assign(Object.assign({}, doc.metadata), { collectionName: collection, originalFilename: originalFilename }) })));
                         allRelevantDocs.push(...docsWithCollection);
-                        // console.log("ARD", allRelevantDocs);
                         searchResults.push({
                             collection,
                             originalFilename,
@@ -558,7 +606,7 @@ Please provide a detailed answer based on the information in the documents:`;
         // Save assistant response to history
         try {
             yield chat_model_1.default.create({
-                userId: userId,
+                userId: user._id, // Use MongoDB user ID
                 collectionName: collectionName || null,
                 role: "assistant",
                 content: responseText,
@@ -616,95 +664,88 @@ app.get("/job/:id", (req, res) => __awaiter(void 0, void 0, void 0, function* ()
     }
 }));
 // Delete PDF endpoint
-app.delete("/pdf/:collectionName", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+// Delete PDF endpoint - REPLACE the existing one
+app.delete("/pdf/:collectionName", clerk_middleware_js_1.clerkAuth, (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const { collectionName } = req.params;
-        // Find and delete from MongoDB
-        const deletedPDF = yield pdf_model_js_1.default.findOneAndDelete({ collectionName });
-        if (!deletedPDF) {
+        console.log("Attempting to delete collection:", collectionName);
+        const clerkUserId = req.auth.userId;
+        // First find the user in MongoDB using Clerk ID
+        const user = yield user_model_js_1.default.findOne({ clerkId: clerkUserId });
+        if (!user) {
             res.status(404).json({
                 success: false,
-                error: "PDF not found",
+                error: "User not found",
             });
             return;
         }
-        // Delete the collection from Qdrant
-        try {
-            yield qdrantClient.deleteCollection(collectionName);
-            console.log(`Collection ${collectionName} deleted successfully`);
+        // Find and delete PDF using the MongoDB user ID
+        const deletedPDF = yield pdf_model_js_1.default.findOneAndDelete({
+            collectionName,
+            userId: user._id // Use MongoDB user ID, not Clerk ID
+        });
+        if (!deletedPDF) {
+            res.status(404).json({
+                success: false,
+                error: "PDF not found or not owned by user",
+            });
+            return;
         }
-        catch (collectionError) {
-            console.error(`Error deleting collection ${collectionName}:`, collectionError);
-        }
-        // Delete the physical file
+        console.log("Found PDF to delete:", deletedPDF.originalFilename);
+        // Delete the file from the filesystem
         try {
-            if (deletedPDF.filePath && fs_1.default.existsSync(deletedPDF.filePath)) {
+            if (fs_1.default.existsSync(deletedPDF.filePath)) {
                 fs_1.default.unlinkSync(deletedPDF.filePath);
                 console.log(`Deleted file: ${deletedPDF.filePath}`);
             }
         }
         catch (fileError) {
-            console.error(`Error deleting file ${deletedPDF.filePath}:`, fileError);
+            console.error("Error deleting file:", fileError);
         }
-        // Delete all chat history associated with this specific collection
+        // Delete the collection from Qdrant
         try {
-            const specificDeleteResult = yield chat_model_1.default.deleteMany({
-                collectionName: collectionName,
-            });
-            console.log(`Deleted ${specificDeleteResult.deletedCount} specific chat messages for collection ${collectionName}`);
+            yield qdrantClient.deleteCollection(collectionName);
+            console.log(`Deleted Qdrant collection: ${collectionName}`);
         }
-        catch (specificChatDeleteError) {
-            console.error(`Error deleting specific chat history for collection ${collectionName}:`, specificChatDeleteError);
-        }
-        // Delete all general chat history (where collectionName is null)
-        try {
-            const generalDeleteResult = yield chat_model_1.default.deleteMany({
-                collectionName: null,
-            });
-            console.log(`Deleted ${generalDeleteResult.deletedCount} general chat messages`);
-        }
-        catch (generalChatDeleteError) {
-            console.error(`Error deleting general chat history:`, generalChatDeleteError);
+        catch (qdrantError) {
+            console.error("Error deleting Qdrant collection:", qdrantError);
         }
         res.json({
             success: true,
-            message: `PDF ${collectionName}, its specific chat history, and all general chat history deleted successfully`,
+            message: "PDF and associated data deleted successfully",
         });
     }
     catch (error) {
         console.error("Error deleting PDF:", error);
         res.status(500).json({
             success: false,
-            error: "Failed to delete PDF and related chat history",
+            error: "Failed to delete PDF",
         });
     }
 }));
 // Get chat history endpoint
+// Get chat history endpoint - REPLACE the existing one
 app.get("/chat/history", clerk_middleware_js_1.clerkAuth, (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const { collectionName, limit } = req.query;
-        const userId = req.auth.userId;
-        if (!userId) {
-            res.status(401).json({
-                success: false,
-                error: "Authentication required",
-            });
+        const clerkUserId = req.auth.userId;
+        // First find the user in MongoDB using Clerk ID
+        const user = yield user_model_js_1.default.findOne({ clerkId: clerkUserId });
+        if (!user) {
+            res.json({ success: true, messages: [] }); // No user means no messages
             return;
         }
-        const query = { userId };
+        const query = { userId: user._id }; // Use MongoDB user ID
         if (collectionName) {
             query.collectionName = collectionName;
         }
         else {
-            query.collectionName = null; // For "all PDFs" chat
+            query.collectionName = null;
         }
         const messages = yield chat_model_1.default.find(query)
             .sort({ timestamp: 1 })
             .limit(parseInt(limit) || 50);
-        res.json({
-            success: true,
-            messages,
-        });
+        res.json({ success: true, messages });
     }
     catch (error) {
         console.error("Error fetching chat history:", error);

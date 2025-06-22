@@ -4,12 +4,7 @@ import { useState, useRef, useEffect } from "react";
 import { SendIcon } from "lucide-react";
 import { useAuth } from "@clerk/nextjs";
 import SignInPrompt from "./prompt";
-import {
-  IPDF,
-  IMessage,
-  ChatResponse,
-  IDocument
-} from "../app/types";
+import { IPDF, IMessage, ChatResponse, IDocument } from "../app/types";
 
 interface ChatComponentProps {
   selectedPDF: string | null;
@@ -32,7 +27,9 @@ const ChatComponent: React.FC<ChatComponentProps> = ({
   const [message, setMessage] = useState<string>("");
   const [loading, setLoading] = useState<boolean>(false);
   const [showAuthPrompt, setShowAuthPrompt] = useState<boolean>(false);
+  const [isInitialLoad, setIsInitialLoad] = useState<boolean>(true);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
   const { isSignedIn, getToken } = useAuth();
 
   const formatTime = (): string => {
@@ -46,12 +43,42 @@ const ChatComponent: React.FC<ChatComponentProps> = ({
   };
 
   const scrollToBottom = (): void => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    if (messagesContainerRef.current) {
+      // Instantly set scroll position to bottom without any animation
+      messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight;
+    }
   };
 
+  // Handle initial load and PDF changes
   useEffect(() => {
-    scrollToBottom();
+    // For initial load or PDF change, scroll immediately
+    const timer = setTimeout(() => {
+      scrollToBottom();
+      setIsInitialLoad(false);
+    }, 0);
+    
+    return () => clearTimeout(timer);
+  }, [selectedPDF]);
+
+  // Handle new messages - always scroll to bottom instantly
+  useEffect(() => {
+    if (chatHistory.length > 0) {
+      // Use requestAnimationFrame to ensure DOM is updated
+      requestAnimationFrame(() => {
+        scrollToBottom();
+      });
+    }
   }, [chatHistory]);
+
+  // Ensure component is ready for display
+  useEffect(() => {
+    // Mark as ready after initial render
+    const timer = setTimeout(() => {
+      setIsInitialLoad(false);
+    }, 100);
+    
+    return () => clearTimeout(timer);
+  }, []);
 
   const formatResponse = (content: string): string => {
     return content
@@ -75,7 +102,7 @@ const ChatComponent: React.FC<ChatComponentProps> = ({
     const userMessage: IMessage = {
       role: "user",
       content: message,
-      timestamp: formatTime()
+      timestamp: formatTime(),
     };
 
     const updatedHistory = [...chatHistory, userMessage];
@@ -87,7 +114,9 @@ const ChatComponent: React.FC<ChatComponentProps> = ({
       const token = await getToken();
       if (!token) throw new Error("No authentication token available");
 
-      let url = `http://localhost:8000/chat?message=${encodeURIComponent(message)}`;
+      let url = `http://localhost:8000/chat?message=${encodeURIComponent(
+        message
+      )}`;
       if (selectedPDF) {
         url += `&collection=${encodeURIComponent(selectedPDF)}`;
       }
@@ -114,7 +143,7 @@ const ChatComponent: React.FC<ChatComponentProps> = ({
         role: "assistant",
         content: data.message,
         documents: data.documents,
-        timestamp: formatTime()
+        timestamp: formatTime(),
       };
 
       updateChatHistory(selectedPDF, [...updatedHistory, assistantMessage]);
@@ -122,8 +151,11 @@ const ChatComponent: React.FC<ChatComponentProps> = ({
       console.error("Error:", error);
       const errorMessage: IMessage = {
         role: "assistant",
-        content: error instanceof Error ? error.message : "An unexpected error occurred",
-        timestamp: formatTime()
+        content:
+          error instanceof Error
+            ? error.message
+            : "An unexpected error occurred",
+        timestamp: formatTime(),
       };
       updateChatHistory(selectedPDF, [...updatedHistory, errorMessage]);
     } finally {
@@ -144,7 +176,9 @@ const ChatComponent: React.FC<ChatComponentProps> = ({
     }
   };
 
-  const handleMessageChange = (e: React.ChangeEvent<HTMLInputElement>): void => {
+  const handleMessageChange = (
+    e: React.ChangeEvent<HTMLInputElement>
+  ): void => {
     setMessage(e.target.value);
   };
 
@@ -157,9 +191,8 @@ const ChatComponent: React.FC<ChatComponentProps> = ({
             <span>
               Chatting with:{" "}
               <span className="text-indigo-400 font-medium">
-                {availablePDFs.find(
-                  (pdf) => pdf.collectionName === selectedPDF
-                )?.originalFilename || "Selected PDF"}
+                {availablePDFs.find((pdf) => pdf.collectionName === selectedPDF)
+                  ?.originalFilename || "Selected PDF"}
               </span>
             </span>
           ) : (
@@ -172,7 +205,16 @@ const ChatComponent: React.FC<ChatComponentProps> = ({
       )}
 
       {/* Messages area */}
-      <div className="flex-1 overflow-y-auto p-2 md:p-4 space-y-3 md:space-y-4">
+      <div
+        ref={messagesContainerRef}
+        className="flex-1 overflow-y-auto p-2 md:p-4 space-y-3 md:space-y-4"
+        style={{
+          // Prevent content shift during initial load
+          minHeight: 0,
+          // Disable smooth scrolling entirely
+          scrollBehavior: "auto"
+        }}
+      >
         {chatHistory.map((msg, index) => (
           <div
             key={index}
@@ -180,9 +222,6 @@ const ChatComponent: React.FC<ChatComponentProps> = ({
               msg.role === "user" ? "items-end" : "items-start"
             }`}
           >
-            <div className="text-xs text-gray-400 mb-1">
-              {msg.timestamp || formatTime()}
-            </div>
             <div
               className={`max-w-[90%] md:max-w-[80%] p-2 md:p-3 rounded-lg text-sm md:text-base ${
                 msg.role === "user"

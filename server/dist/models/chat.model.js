@@ -36,12 +36,11 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const mongoose_1 = __importStar(require("mongoose"));
 const ChatMessageSchema = new mongoose_1.Schema({
     userId: { type: String, required: true },
-    collectionName: { type: String, default: null }, // null represents "all PDFs" chat
-    role: { type: String, enum: ["assistant", "user"], required: true },
+    collectionName: { type: String },
+    role: { type: String, required: true },
     content: { type: String, required: true },
-    documents: { type: mongoose_1.Schema.Types.Mixed, default: [] },
+    documents: { type: mongoose_1.Schema.Types.Mixed },
+    isSummary: { type: Boolean, default: false },
     timestamp: { type: Date, default: Date.now }
 });
-// Compound index for faster querying
-ChatMessageSchema.index({ userId: 1, collectionName: 1, timestamp: 1 });
 exports.default = mongoose_1.default.model("ChatMessage", ChatMessageSchema);

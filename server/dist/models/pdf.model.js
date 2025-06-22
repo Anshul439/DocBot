@@ -40,6 +40,6 @@ const PDFMetadataSchema = new mongoose_1.Schema({
     uploadTime: { type: Date, default: Date.now },
     chunks: { type: Number, required: true },
     filePath: { type: String, required: true },
-    userId: { type: mongoose_1.Schema.Types.ObjectId, ref: 'User' } // Optional user reference
+    userId: { type: String, required: true }
 });
 exports.default = mongoose_1.default.model("PDFMetadata", PDFMetadataSchema);

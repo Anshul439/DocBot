@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import ChatComponent from "../components/chat";
 import FileUploadComponent from "../components/file-upload";
 import PDFListComponent from "../components/pdf-list";
@@ -16,21 +16,23 @@ export default function Home() {
   const [chatHistories, setChatHistories] = useState<Record<string, IMessage[]>>({ all: [] });
   const [hasPDFs, setHasPDFs] = useState<boolean>(false);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState<boolean>(false);
+  const [isInitialLoad, setIsInitialLoad] = useState<boolean>(true);
 
-  useEffect(() => {
-    console.log(user);
-    fetchAvailablePDFs();
-    const handlePdfUploaded = () => {
-      fetchAvailablePDFs();
-    };
+  const fetchAvailablePDFs = useCallback(async (): Promise<void> => {
+    if (!isSignedIn) {
+      setAvailablePDFs([]);
+      setHasPDFs(false);
+      return;
+    }
 
-    window.addEventListener("pdf-uploaded", handlePdfUploaded);
-    return () => window.removeEventListener("pdf-uploaded", handlePdfUploaded);
-  }, [user]);
-
-  const fetchAvailablePDFs = async (): Promise<void> => {
     try {
-      const response = await fetch("http://localhost:8000/pdfs");
+      const token = await getToken();
+      const response = await fetch("http://localhost:8000/pdfs", {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
@@ -50,16 +52,46 @@ export default function Home() {
           });
           return newHistories;
         });
+
+        if (data.success && data.pdfs) {
+  setAvailablePDFs(data.pdfs);
+  setHasPDFs(data.pdfs.length > 0);
+
+  // Clear chat history if no PDFs remain
+  if (data.pdfs.length === 0) {
+    setChatHistories({ all: [] });
+    setSelectedPDF(null);
+  } else {
+    setChatHistories((prev) => {
+      const newHistories = { ...prev };
+      data.pdfs.forEach((pdf: IPDF) => {
+        if (!newHistories[pdf.collectionName]) {
+          newHistories[pdf.collectionName] = [];
+        }
+      });
+      return newHistories;
+    });
+  }
+} else {
+  setHasPDFs(false);
+  // Clear chat history when fetch fails or no PDFs
+  setChatHistories({ all: [] });
+  setSelectedPDF(null);
+}
       } else {
         setHasPDFs(false);
       }
     } catch (error) {
       console.error("Error fetching PDFs:", error);
       setHasPDFs(false);
+    } finally {
+      setIsInitialLoad(false);
     }
-  };
+  }, [isSignedIn, getToken]);
 
-  const fetchChatHistory = async (collectionName: string | null): Promise<void> => {
+  const fetchChatHistory = useCallback(async (collectionName: string | null): Promise<void> => {
+    if (!isSignedIn) return;
+
     try {
       const token = await getToken();
       if (!token) {
@@ -87,17 +119,35 @@ export default function Home() {
     } catch (error) {
       console.error("Error fetching chat history:", error);
     }
-  };
+  }, [isSignedIn, getToken]);
 
-  const handleSelectPDF = (collectionName: string | null): void => {
-    setSelectedPDF(collectionName);
-    if (isSignedIn) {
-      fetchChatHistory(collectionName);
+  // Single useEffect for initial data loading
+  useEffect(() => {
+    if (user && isSignedIn) {
+      fetchAvailablePDFs();
     }
-    setMobileSidebarOpen(false);
-  };
 
-  const updateChatHistory = (
+    const handlePdfUploaded = () => {
+      fetchAvailablePDFs();
+    };
+
+    window.addEventListener("pdf-uploaded", handlePdfUploaded);
+    return () => window.removeEventListener("pdf-uploaded", handlePdfUploaded);
+  }, [user, isSignedIn, fetchAvailablePDFs]);
+
+  // Separate useEffect for handling PDF selection and chat history loading
+  useEffect(() => {
+    if (isSignedIn && !isInitialLoad) {
+      fetchChatHistory(selectedPDF);
+    }
+  }, [selectedPDF, isSignedIn, isInitialLoad, fetchChatHistory]);
+
+  const handleSelectPDF = useCallback((collectionName: string | null): void => {
+    setSelectedPDF(collectionName);
+    setMobileSidebarOpen(false);
+  }, []);
+
+  const updateChatHistory = useCallback((
     collectionName: string | null,
     messages: IMessage[]
   ): void => {
@@ -106,15 +156,15 @@ export default function Home() {
       ...prev,
       [key]: messages,
     }));
-  };
+  }, []);
 
-  const handleMobileMenuClick = (): void => {
+  const handleMobileMenuClick = useCallback((): void => {
     setMobileSidebarOpen(!mobileSidebarOpen);
-  };
+  }, [mobileSidebarOpen]);
 
-  const handleOverlayClick = (): void => {
+  const handleOverlayClick = useCallback((): void => {
     setMobileSidebarOpen(false);
-  };
+  }, []);
 
   return (
     <div className="bg-[#000000f7] text-white h-screen flex flex-col">
@@ -174,17 +224,26 @@ export default function Home() {
               onClick={handleOverlayClick}
             />
           )}
-          <ChatComponent
-            selectedPDF={selectedPDF}
-            chatHistory={
-              selectedPDF
-                ? chatHistories[selectedPDF] || []
-                : chatHistories["all"]
-            }
-            updateChatHistory={updateChatHistory}
-            availablePDFs={availablePDFs}
-            hasPDFs={hasPDFs}
-          />
+          {/* Only render chat when not in initial loading state */}
+          {!isInitialLoad && (
+            <ChatComponent
+              selectedPDF={selectedPDF}
+              chatHistory={
+                selectedPDF
+                  ? chatHistories[selectedPDF] || []
+                  : chatHistories["all"]
+              }
+              updateChatHistory={updateChatHistory}
+              availablePDFs={availablePDFs}
+              hasPDFs={hasPDFs}
+            />
+          )}
+          {/* Show loading state during initial load */}
+          {isInitialLoad && (
+            <div className="flex items-center justify-center h-full">
+              <div className="text-gray-400">Loading...</div>
+            </div>
+          )}
         </div>
       </div>
     </div>

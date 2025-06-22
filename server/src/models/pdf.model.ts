@@ -1,4 +1,4 @@
-import mongoose, { Schema, Document } from "mongoose";
+import mongoose, { Schema, Document, Types  } from "mongoose";
 
 interface IPDFMetadata extends Document {
   originalFilename: string;
@@ -6,7 +6,7 @@ interface IPDFMetadata extends Document {
   uploadTime: Date;
   chunks: number;
   filePath: string;
-  userId?: string; // Optional if you want to associate PDFs with users
+  userId: string
 }
 
 const PDFMetadataSchema: Schema = new Schema({
@@ -15,7 +15,7 @@ const PDFMetadataSchema: Schema = new Schema({
   uploadTime: { type: Date, default: Date.now },
   chunks: { type: Number, required: true },
   filePath: { type: String, required: true },
-  userId: { type: Schema.Types.ObjectId, ref: 'User' } // Optional user reference
+  userId: { type: String, required: true }
 });
 
 export default mongoose.model<IPDFMetadata>("PDFMetadata", PDFMetadataSchema);

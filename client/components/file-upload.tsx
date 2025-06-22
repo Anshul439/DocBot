@@ -14,13 +14,15 @@ const FileUploadComponent: React.FC<FileUploadComponentProps> = () => {
   // const [file, setFile] = useState<File | null>(null);
   const [fileSize, setFileSize] = useState<string>("");
   const [fileName, setFileName] = useState<string>("");
-  const [uploadStatus, setUploadStatus] = useState<UploadStatus>(UploadStatus.IDLE);
+  const [uploadStatus, setUploadStatus] = useState<UploadStatus>(
+    UploadStatus.IDLE
+  );
   const [statusMessage, setStatusMessage] = useState<string>("");
   const [isHovered, setIsHovered] = useState<boolean>(false);
   const [showAuthPrompt, setShowAuthPrompt] = useState<boolean>(false);
   const [jobId, setJobId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const { isSignedIn } = useAuth();
+  const { isSignedIn, getToken } = useAuth();
 
   useEffect(() => {
     if (jobId && uploadStatus === UploadStatus.PROCESSING) {
@@ -56,7 +58,9 @@ const FileUploadComponent: React.FC<FileUploadComponentProps> = () => {
     }
   };
 
-  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>): Promise<void> => {
+  const handleFileUpload = async (
+    event: React.ChangeEvent<HTMLInputElement>
+  ): Promise<void> => {
     const selectedFile = event.target.files?.[0];
     if (!selectedFile) return;
 
@@ -73,13 +77,21 @@ const FileUploadComponent: React.FC<FileUploadComponentProps> = () => {
     setStatusMessage("Uploading file...");
 
     try {
+      const token = await getToken();
+      console.log(token);
+      
       const formData = new FormData();
       formData.append("pdf", selectedFile);
 
       const response = await fetch("http://localhost:8000/upload/pdf", {
         method: "POST",
-        body: formData,
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+        body: formData
       });
+      console.log(response);
+      
 
       const data = await response.json();
 
@@ -122,8 +134,8 @@ const FileUploadComponent: React.FC<FileUploadComponentProps> = () => {
     if (droppedFile && droppedFile.type === "application/pdf") {
       const event = {
         target: {
-          files: [droppedFile]
-        }
+          files: [droppedFile],
+        },
       } as unknown as React.ChangeEvent<HTMLInputElement>;
       handleFileUpload(event);
     } else {
@@ -168,7 +180,7 @@ const FileUploadComponent: React.FC<FileUploadComponentProps> = () => {
   const isError = uploadStatus === UploadStatus.ERROR;
   const isIdle = uploadStatus === UploadStatus.IDLE;
 
-  const renderStatusIcon = ()=> {
+  const renderStatusIcon = () => {
     if (isUploading || isProcessing) {
       return (
         <Loader2 className="h-5 w-5 md:h-6 md:w-6 text-indigo-500 animate-spin" />
