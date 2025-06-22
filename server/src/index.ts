@@ -847,70 +847,66 @@ app.get("/job/:id", async (req: Request, res: Response): Promise<void> => {
 });
 
 // Delete PDF endpoint
-// Delete PDF endpoint - REPLACE the existing one
 app.delete(
   "/pdf/:collectionName",
   clerkAuth,
   async (req: Request, res: Response): Promise<void> => {
     try {
       const { collectionName } = req.params;
-      console.log("Attempting to delete collection:", collectionName);
-      
       const clerkUserId = (req as any).auth.userId;
 
-      // First find the user in MongoDB using Clerk ID
+      // 1. First validate user and PDF ownership (fast operation)
       const user = await User.findOne({ clerkId: clerkUserId });
       if (!user) {
-        res.status(404).json({
-          success: false,
-          error: "User not found",
-        });
-        return;
+        return res.status(404).json({ success: false, error: "User not found" });
       }
 
-      // Find and delete PDF using the MongoDB user ID
-      const deletedPDF = await PDFMetadata.findOneAndDelete({
+      // 2. Immediately mark as deleted in MongoDB (fast operation)
+      const deletedPDF = await PDFMetadata.findOneAndDelete({ 
         collectionName,
-        userId: user._id // Use MongoDB user ID, not Clerk ID
+        userId: user._id 
       });
 
       if (!deletedPDF) {
-        res.status(404).json({
-          success: false,
-          error: "PDF not found or not owned by user",
+        return res.status(404).json({ 
+          success: false, 
+          error: "PDF not found or not owned by user" 
         });
-        return;
       }
 
-      console.log("Found PDF to delete:", deletedPDF.originalFilename);
-
-      // Delete the file from the filesystem
-      try {
-        if (fs.existsSync(deletedPDF.filePath)) {
-          fs.unlinkSync(deletedPDF.filePath);
-          console.log(`Deleted file: ${deletedPDF.filePath}`);
-        }
-      } catch (fileError) {
-        console.error("Error deleting file:", fileError);
-      }
-
-      // Delete the collection from Qdrant
-      try {
-        await qdrantClient.deleteCollection(collectionName);
-        console.log(`Deleted Qdrant collection: ${collectionName}`);
-      } catch (qdrantError) {
-        console.error("Error deleting Qdrant collection:", qdrantError);
-      }
-
-      res.json({
-        success: true,
-        message: "PDF and associated data deleted successfully",
+      // 3. Respond to client immediately
+      res.json({ 
+        success: true, 
+        message: "PDF deleted successfully" 
       });
+
+      // 4. Process slower deletion operations after response
+      // (These won't block the response)
+      try {
+        // Delete file system file
+        if (fs.existsSync(deletedPDF.filePath)) {
+          fs.unlink(deletedPDF.filePath, (err) => { // Using async version
+            if (err) console.error("File deletion error:", err);
+            else console.log("File deleted:", deletedPDF.filePath);
+          });
+        }
+
+        // Delete Qdrant collection
+        qdrantClient.deleteCollection(collectionName)
+          .then(() => console.log("Qdrant collection deleted"))
+          .catch(err => console.error("Qdrant deletion error:", err));
+
+      } catch (bgError) {
+        console.error("Background cleanup error:", bgError);
+        // You might want to log this to an error tracking system
+        // Optionally retry or implement a cleanup job later
+      }
+
     } catch (error) {
-      console.error("Error deleting PDF:", error);
-      res.status(500).json({
-        success: false,
-        error: "Failed to delete PDF",
+      console.error("PDF deletion error:", error);
+      res.status(500).json({ 
+        success: false, 
+        error: "Failed to delete PDF" 
       });
     }
   }

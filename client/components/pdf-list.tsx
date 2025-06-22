@@ -19,44 +19,45 @@ const PDFListComponent: React.FC<PDFListComponentProps> = ({
 }) => {
   const { getToken } = useAuth();
 
-  const handleDeletePDF = async (
-    collectionName: string,
-    event: React.MouseEvent
-  ) => {
-    event.stopPropagation();
+const handleDeletePDF = async (
+  collectionName: string,
+  event: React.MouseEvent
+) => {
+  event.stopPropagation();
 
-    try {
-      const token = await getToken();
-      const response = await fetch(
-        `http://localhost:8000/pdf/${collectionName}`,
-        {
-          method: "DELETE",
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
-      );
-      console.log(response);
-      
+  try {
+    // Optimistic UI update - remove the PDF from local state immediately
+    const updatedPDFs = pdfs.filter(pdf => pdf.collectionName !== collectionName);
+    onRefresh(updatedPDFs); // You'll need to modify your onRefresh prop to accept updated PDFs
 
-      const data = await response.json();
+    const token = await getToken();
+    const response = await fetch(
+      `http://localhost:8000/pdf/${collectionName}`,
+      {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      }
+    );
 
-      if (data.success) {
-  onRefresh();
+    const data = await response.json();
 
-  // If this was the last PDF, clear selection
-  if (pdfs.length === 1) {
-    setSelectedPDF(null);
-  }
-  // If the deleted PDF was selected, switch to "All PDFs"
-  else if (selectedPDF === collectionName) {
-    setSelectedPDF(null);
-  }
-}
-    } catch (error) {
-      console.error("Error deleting PDF:", error);
+    if (!data.success) {
+      // If the deletion failed, revert the UI
+      onRefresh(); // This would refetch the actual state
+      throw new Error(data.error || "Failed to delete PDF");
     }
-  };
+
+    // Handle switching selection if needed
+    if (selectedPDF === collectionName) {
+      setSelectedPDF(null);
+    }
+  } catch (error) {
+    console.error("Error deleting PDF:", error);
+    // You might want to show a toast notification here
+  }
+};
 
   if (!pdfs || pdfs.length === 0) {
     return (

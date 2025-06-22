@@ -18,31 +18,36 @@ export default function Home() {
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState<boolean>(false);
   const [isInitialLoad, setIsInitialLoad] = useState<boolean>(true);
 
-  const fetchAvailablePDFs = useCallback(async (): Promise<void> => {
-    if (!isSignedIn) {
-      setAvailablePDFs([]);
-      setHasPDFs(false);
-      return;
+const fetchAvailablePDFs = useCallback(async (): Promise<void> => {
+  if (!isSignedIn) {
+    setAvailablePDFs([]);
+    setHasPDFs(false);
+    return;
+  }
+
+  try {
+    const token = await getToken();
+    const response = await fetch("http://localhost:8000/pdfs", {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+    
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
     }
+    
+    const data: FetchPdfsResponse = await response.json();
 
-    try {
-      const token = await getToken();
-      const response = await fetch("http://localhost:8000/pdfs", {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-      
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-      
-      const data: FetchPdfsResponse = await response.json();
+    if (data.success && data.pdfs) {
+      setAvailablePDFs(data.pdfs);
+      setHasPDFs(data.pdfs.length > 0);
 
-      if (data.success && data.pdfs) {
-        setAvailablePDFs(data.pdfs);
-        setHasPDFs(data.pdfs.length > 0);
-
+      // Clear chat history if no PDFs remain
+      if (data.pdfs.length === 0) {
+        setChatHistories({ all: [] });
+        setSelectedPDF(null);
+      } else {
         setChatHistories((prev) => {
           const newHistories = { ...prev };
           data.pdfs.forEach((pdf: IPDF) => {
@@ -52,42 +57,20 @@ export default function Home() {
           });
           return newHistories;
         });
-
-        if (data.success && data.pdfs) {
-  setAvailablePDFs(data.pdfs);
-  setHasPDFs(data.pdfs.length > 0);
-
-  // Clear chat history if no PDFs remain
-  if (data.pdfs.length === 0) {
-    setChatHistories({ all: [] });
-    setSelectedPDF(null);
-  } else {
-    setChatHistories((prev) => {
-      const newHistories = { ...prev };
-      data.pdfs.forEach((pdf: IPDF) => {
-        if (!newHistories[pdf.collectionName]) {
-          newHistories[pdf.collectionName] = [];
-        }
-      });
-      return newHistories;
-    });
-  }
-} else {
-  setHasPDFs(false);
-  // Clear chat history when fetch fails or no PDFs
-  setChatHistories({ all: [] });
-  setSelectedPDF(null);
-}
-      } else {
-        setHasPDFs(false);
       }
-    } catch (error) {
-      console.error("Error fetching PDFs:", error);
+    } else {
       setHasPDFs(false);
-    } finally {
-      setIsInitialLoad(false);
+      // Clear chat history when fetch fails or no PDFs
+      setChatHistories({ all: [] });
+      setSelectedPDF(null);
     }
-  }, [isSignedIn, getToken]);
+  } catch (error) {
+    console.error("Error fetching PDFs:", error);
+    setHasPDFs(false);
+  } finally {
+    setIsInitialLoad(false);
+  }
+}, [isSignedIn, getToken]);
 
   const fetchChatHistory = useCallback(async (collectionName: string | null): Promise<void> => {
     if (!isSignedIn) return;

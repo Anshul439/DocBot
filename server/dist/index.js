@@ -664,62 +664,59 @@ app.get("/job/:id", (req, res) => __awaiter(void 0, void 0, void 0, function* ()
     }
 }));
 // Delete PDF endpoint
-// Delete PDF endpoint - REPLACE the existing one
 app.delete("/pdf/:collectionName", clerk_middleware_js_1.clerkAuth, (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const { collectionName } = req.params;
-        console.log("Attempting to delete collection:", collectionName);
         const clerkUserId = req.auth.userId;
-        // First find the user in MongoDB using Clerk ID
+        // 1. First validate user and PDF ownership (fast operation)
         const user = yield user_model_js_1.default.findOne({ clerkId: clerkUserId });
         if (!user) {
-            res.status(404).json({
-                success: false,
-                error: "User not found",
-            });
-            return;
+            return res.status(404).json({ success: false, error: "User not found" });
         }
-        // Find and delete PDF using the MongoDB user ID
+        // 2. Immediately mark as deleted in MongoDB (fast operation)
         const deletedPDF = yield pdf_model_js_1.default.findOneAndDelete({
             collectionName,
-            userId: user._id // Use MongoDB user ID, not Clerk ID
+            userId: user._id
         });
         if (!deletedPDF) {
-            res.status(404).json({
+            return res.status(404).json({
                 success: false,
-                error: "PDF not found or not owned by user",
+                error: "PDF not found or not owned by user"
             });
-            return;
         }
-        console.log("Found PDF to delete:", deletedPDF.originalFilename);
-        // Delete the file from the filesystem
-        try {
-            if (fs_1.default.existsSync(deletedPDF.filePath)) {
-                fs_1.default.unlinkSync(deletedPDF.filePath);
-                console.log(`Deleted file: ${deletedPDF.filePath}`);
-            }
-        }
-        catch (fileError) {
-            console.error("Error deleting file:", fileError);
-        }
-        // Delete the collection from Qdrant
-        try {
-            yield qdrantClient.deleteCollection(collectionName);
-            console.log(`Deleted Qdrant collection: ${collectionName}`);
-        }
-        catch (qdrantError) {
-            console.error("Error deleting Qdrant collection:", qdrantError);
-        }
+        // 3. Respond to client immediately
         res.json({
             success: true,
-            message: "PDF and associated data deleted successfully",
+            message: "PDF deleted successfully"
         });
+        // 4. Process slower deletion operations after response
+        // (These won't block the response)
+        try {
+            // Delete file system file
+            if (fs_1.default.existsSync(deletedPDF.filePath)) {
+                fs_1.default.unlink(deletedPDF.filePath, (err) => {
+                    if (err)
+                        console.error("File deletion error:", err);
+                    else
+                        console.log("File deleted:", deletedPDF.filePath);
+                });
+            }
+            // Delete Qdrant collection
+            qdrantClient.deleteCollection(collectionName)
+                .then(() => console.log("Qdrant collection deleted"))
+                .catch(err => console.error("Qdrant deletion error:", err));
+        }
+        catch (bgError) {
+            console.error("Background cleanup error:", bgError);
+            // You might want to log this to an error tracking system
+            // Optionally retry or implement a cleanup job later
+        }
     }
     catch (error) {
-        console.error("Error deleting PDF:", error);
+        console.error("PDF deletion error:", error);
         res.status(500).json({
             success: false,
-            error: "Failed to delete PDF",
+            error: "Failed to delete PDF"
         });
     }
 }));
