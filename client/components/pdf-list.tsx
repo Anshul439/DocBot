@@ -39,7 +39,7 @@ const PDFListComponent: React.FC<PDFListComponentProps> = ({
       }
 
       const response = await fetch(
-        `http://localhost:8000/pdf/${collectionName}`,
+        `${process.env.ROOT_URL}/pdf/${collectionName}`,
         {
           method: "DELETE",
           headers: {

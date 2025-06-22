@@ -35,7 +35,7 @@ const FileUploadComponent: React.FC<FileUploadComponentProps> = () => {
     if (!jobId) return;
 
     try {
-      const response = await fetch(`http://localhost:8000/job/${jobId}`);
+      const response = await fetch(`${process.env.ROOT_URL}/job/${jobId}`);
       const data = await response.json();
 
       if (data.success) {
@@ -83,7 +83,7 @@ const FileUploadComponent: React.FC<FileUploadComponentProps> = () => {
       const formData = new FormData();
       formData.append("pdf", selectedFile);
 
-      const response = await fetch("http://localhost:8000/upload/pdf", {
+      const response = await fetch(`${process.env.ROOT_URL}/upload/pdf`, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${token}`,

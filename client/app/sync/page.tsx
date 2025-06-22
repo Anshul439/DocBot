@@ -38,7 +38,7 @@ export default function SyncPage() {
 
         setLoadingMessage("Checking user status...");
         const checkUserRes = await fetch(
-          `http://localhost:8000/api/users/check/${user.id}`,
+          `${process.env.ROOT_URL}/api/users/check/${user.id}`,
           {
             method: "GET",
             headers: {
@@ -63,7 +63,7 @@ export default function SyncPage() {
         }
 
         setLoadingMessage("Creating user profile...");
-        const syncRes = await fetch("http://localhost:8000/api/users/sync", {
+        const syncRes = await fetch(`${process.env.ROOT_URL}/api/users/sync`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",

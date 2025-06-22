@@ -129,7 +129,7 @@ const ChatComponent: React.FC<ChatComponentProps> = ({
       const token = await getToken();
       if (!token) throw new Error("No authentication token available");
 
-      let url = `http://localhost:8000/chat?message=${encodeURIComponent(
+      let url = `${process.env.ROOT_URL}/chat?message=${encodeURIComponent(
         message
       )}`;
       if (selectedPDF) {
