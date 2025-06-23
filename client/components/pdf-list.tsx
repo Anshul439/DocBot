@@ -28,9 +28,9 @@ const PDFListComponent: React.FC<PDFListComponentProps> = ({
     // Prevent multiple clicks
     const button = event.currentTarget as HTMLButtonElement;
     if (button.disabled) return;
-    
+
     button.disabled = true;
-    button.classList.add('opacity-50', 'cursor-not-allowed');
+    button.classList.add("opacity-50", "cursor-not-allowed");
 
     try {
       const token = await getToken();
@@ -51,33 +51,37 @@ const PDFListComponent: React.FC<PDFListComponentProps> = ({
       const data = await response.json();
 
       if (!response.ok || !data.success) {
-        throw new Error(data.error || `HTTP ${response.status}: Failed to delete PDF`);
+        throw new Error(
+          data.error || `HTTP ${response.status}: Failed to delete PDF`
+        );
       }
 
       // Success: Update UI state
-      const updatedPDFs = pdfs.filter(pdf => pdf.collectionName !== collectionName);
-      
+      const updatedPDFs = pdfs.filter(
+        (pdf) => pdf.collectionName !== collectionName
+      );
+
       // If the deleted PDF was selected, clear selection
       if (selectedPDF === collectionName) {
         setSelectedPDF(null);
       }
-      
+
       // Update the PDF list
       onRefresh(updatedPDFs);
 
       console.log(`Successfully deleted PDF: ${collectionName}`);
-
     } catch (error) {
       console.error("Error deleting PDF:", error);
-      
+
       // Show user-friendly error message
-      const errorMessage = error instanceof Error ? error.message : "Failed to delete PDF";
+      const errorMessage =
+        error instanceof Error ? error.message : "Failed to delete PDF";
       alert(`Error: ${errorMessage}`);
-      
+
       // Re-enable button
       button.disabled = false;
-      button.classList.remove('opacity-50', 'cursor-not-allowed');
-      
+      button.classList.remove("opacity-50", "cursor-not-allowed");
+
       // Refresh to get current state from server
       onRefresh();
     }
@@ -92,7 +96,12 @@ const PDFListComponent: React.FC<PDFListComponentProps> = ({
   }
 
   return (
-    <div className="flex-1 overflow-y-auto">
+    <div
+      className="flex-1 overflow-y-auto  [&::-webkit-scrollbar]:w-2 Add commentMore actions
+    [&::-webkit-scrollbar-thumb]:rounded-full 
+    [&::-webkit-scrollbar-thumb]:bg-gray-700 
+    [&::-webkit-scrollbar-track]:bg-gray-900"
+    >
       <div className="space-y-1 md:space-y-2">
         <button
           onClick={() => setSelectedPDF(null)}

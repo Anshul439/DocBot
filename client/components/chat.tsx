@@ -53,7 +53,8 @@ const ChatComponent: React.FC<ChatComponentProps> = ({
   const scrollToBottom = (): void => {
     if (messagesContainerRef.current) {
       // Instantly set scroll position to bottom without any animation
-      messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight;
+      messagesContainerRef.current.scrollTop =
+        messagesContainerRef.current.scrollHeight;
     }
   };
 
@@ -64,7 +65,7 @@ const ChatComponent: React.FC<ChatComponentProps> = ({
       scrollToBottom();
       setIsInitialLoad(false);
     }, 0);
-    
+
     return () => clearTimeout(timer);
   }, [selectedPDF]);
 
@@ -84,17 +85,17 @@ const ChatComponent: React.FC<ChatComponentProps> = ({
     const timer = setTimeout(() => {
       setIsInitialLoad(false);
     }, 100);
-    
+
     return () => clearTimeout(timer);
   }, []);
 
   // Add this useEffect to clear chat state when signing out
-useEffect(() => {
-  if (!isSignedIn) {
-    setMessage("");
-    setShowAuthPrompt(false);
-  }
-}, [isSignedIn]);
+  useEffect(() => {
+    if (!isSignedIn) {
+      setMessage("");
+      setShowAuthPrompt(false);
+    }
+  }, [isSignedIn]);
 
   const formatResponse = (content: string): string => {
     return content
@@ -137,9 +138,9 @@ useEffect(() => {
       const token = await getToken();
       if (!token) throw new Error("No authentication token available");
 
-      let url = `${process.env.NEXT_PUBLIC_ROOT_URL}/chat?message=${encodeURIComponent(
-        message
-      )}`;
+      let url = `${
+        process.env.NEXT_PUBLIC_ROOT_URL
+      }/chat?message=${encodeURIComponent(message)}`;
       if (selectedPDF) {
         url += `&collection=${encodeURIComponent(selectedPDF)}`;
       }
@@ -230,12 +231,15 @@ useEffect(() => {
       {/* Messages area */}
       <div
         ref={messagesContainerRef}
-        className="flex-1 overflow-y-auto p-2 md:p-4 space-y-3 md:space-y-4"
+        className="flex-1 overflow-y-auto p-2 md:p-4 space-y-3 md:space-y-4 [&::-webkit-scrollbar]:w-2 Add commentMore actions
+    [&::-webkit-scrollbar-thumb]:rounded-full 
+    [&::-webkit-scrollbar-thumb]:bg-gray-700 
+    [&::-webkit-scrollbar-track]:bg-gray-900"
         style={{
           // Prevent content shift during initial load
           minHeight: 0,
           // Disable smooth scrolling entirely
-          scrollBehavior: "auto"
+          scrollBehavior: "auto",
         }}
       >
         {chatHistory.map((msg, index) => (
