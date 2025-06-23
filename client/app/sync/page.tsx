@@ -8,15 +8,11 @@ export default function SyncPage() {
   const { user, isLoaded: userLoaded } = useUser();
   const { getToken, isLoaded: authLoaded } = useAuth();
   const router = useRouter();
-  // const [isLoading, setIsLoading] = useState(true);
-  // const [error, setError] = useState<string | null>(null);
   const [loadingMessage, setLoadingMessage] = useState("Initializing...");
 
   useEffect(() => {
     const handleUserSync = async () => {
       try {
-        // setError(null);
-
         if (!userLoaded || !authLoaded) {
           setLoadingMessage("Loading authentication...");
           return;
@@ -28,41 +24,12 @@ export default function SyncPage() {
         }
 
         setLoadingMessage("Syncing user data...");
-        console.log("Processing user:", user);
-
         const token = await getToken();
 
         if (!token) {
           throw new Error("Authentication token not available");
         }
 
-        setLoadingMessage("Checking user status...");
-        const checkUserRes = await fetch(
-          `${process.env.NEXT_PUBLIC_ROOT_URL}/api/users/check/${user.id}`,
-          {
-            method: "GET",
-            headers: {
-              Authorization: `Bearer ${token}`,
-            },
-          }
-        );
-
-        if (!checkUserRes.ok && checkUserRes.status !== 404) {
-          const errorData = await checkUserRes.text();
-          throw new Error(
-            `Error checking user existence (${checkUserRes.status}): ${errorData}`
-          );
-        }
-
-        const userExists = checkUserRes.status === 200;
-
-        if (userExists) {
-          setLoadingMessage("User found, redirecting...");
-          setTimeout(() => router.push("/"), 500);
-          return;
-        }
-
-        setLoadingMessage("Creating user profile...");
         const syncRes = await fetch(`${process.env.NEXT_PUBLIC_ROOT_URL}/api/users/sync`, {
           method: "POST",
           headers: {
@@ -79,22 +46,15 @@ export default function SyncPage() {
 
         if (!syncRes.ok) {
           const errorData = await syncRes.text();
-          throw new Error(
-            `Server error during sync (${syncRes.status}): ${errorData}`
-          );
+          throw new Error(`Sync failed (${syncRes.status}): ${errorData}`);
         }
 
-        const syncData = await syncRes.json();
-        console.log("User sync successful:", syncData);
-
-        setLoadingMessage("Setup complete, redirecting...");
-        setTimeout(() => router.push("/"), 1500);
+        setLoadingMessage("Redirecting...");
+        setTimeout(() => router.push("/"), 500);
       } catch (err) {
-        console.error("Error during user sync process:", err);
-        // setError(
-        //   err instanceof Error ? err.message : "An unknown error occurred"
-        // );
-        // setIsLoading(false);
+        console.error("Error during user sync:", err);
+        setLoadingMessage("Error occurred - redirecting...");
+        setTimeout(() => router.push("/"), 1500);
       }
     };
 

@@ -8,5 +8,4 @@ const clerk_middleware_js_1 = require("../middlewares/clerk.middleware.js");
 const user_controller_js_1 = require("../controllers/user.controller.js");
 const router = express_1.default.Router();
 router.post("/sync", clerk_middleware_js_1.clerkAuth, user_controller_js_1.syncClerkUser);
-router.get("/check/:clerkId", user_controller_js_1.checkUserExists);
 exports.default = router;

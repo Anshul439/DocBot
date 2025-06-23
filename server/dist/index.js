@@ -674,10 +674,11 @@ app.delete("/pdf/:collectionName", clerk_middleware_js_1.clerkAuth, (req, res) =
         const user = yield user_model_js_1.default.findOne({ clerkId: clerkUserId });
         if (!user) {
             console.log("User not found");
-            return res.status(404).json({
+            res.status(404).json({
                 success: false,
                 error: "User not found",
             });
+            return;
         }
         // 2. Find and validate PDF ownership
         const pdfToDelete = yield pdf_model_js_1.default.findOne({
@@ -686,10 +687,11 @@ app.delete("/pdf/:collectionName", clerk_middleware_js_1.clerkAuth, (req, res) =
         });
         if (!pdfToDelete) {
             console.log(`PDF not found or not owned by user: ${collectionName}`);
-            return res.status(404).json({
+            res.status(404).json({
                 success: false,
                 error: "PDF not found or not owned by user",
             });
+            return;
         }
         console.log(`Found PDF to delete: ${pdfToDelete.originalFilename}`);
         // 3. Check remaining PDFs count BEFORE deletion
@@ -704,10 +706,11 @@ app.delete("/pdf/:collectionName", clerk_middleware_js_1.clerkAuth, (req, res) =
         });
         if (!deletedPDF) {
             console.log("Failed to delete from database");
-            return res.status(500).json({
+            res.status(500).json({
                 success: false,
                 error: "Failed to delete PDF from database",
             });
+            return;
         }
         console.log(`Successfully deleted from database: ${deletedPDF.originalFilename}`);
         // 5. If this was the last PDF, delete "All PDFs" chat messages

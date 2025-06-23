@@ -864,10 +864,11 @@ app.delete(
       const user = await User.findOne({ clerkId: clerkUserId });
       if (!user) {
         console.log("User not found");
-        return res.status(404).json({
+        res.status(404).json({
           success: false,
           error: "User not found",
         });
+        return
       }
 
       // 2. Find and validate PDF ownership
@@ -878,10 +879,11 @@ app.delete(
 
       if (!pdfToDelete) {
         console.log(`PDF not found or not owned by user: ${collectionName}`);
-        return res.status(404).json({
+        res.status(404).json({
           success: false,
           error: "PDF not found or not owned by user",
         });
+        return
       }
 
       console.log(`Found PDF to delete: ${pdfToDelete.originalFilename}`);
@@ -900,10 +902,11 @@ app.delete(
 
       if (!deletedPDF) {
         console.log("Failed to delete from database");
-        return res.status(500).json({
+        res.status(500).json({
           success: false,
           error: "Failed to delete PDF from database",
         });
+        return
       }
 
       console.log(
