@@ -202,7 +202,7 @@ export default function Home() {
           >
             {mobileSidebarOpen ? <X size={24} /> : <Menu size={24} />}
           </button>
-          <h1 className="text-xl font-bold">PDF Chat Assistant</h1>
+          <h1 className="text-xl font-bold">DocBot</h1>
         </div>
         <div className="flex items-center space-x-4">
           {!isSignedIn ? (
