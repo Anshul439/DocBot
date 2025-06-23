@@ -88,6 +88,14 @@ const ChatComponent: React.FC<ChatComponentProps> = ({
     return () => clearTimeout(timer);
   }, []);
 
+  // Add this useEffect to clear chat state when signing out
+useEffect(() => {
+  if (!isSignedIn) {
+    setMessage("");
+    setShowAuthPrompt(false);
+  }
+}, [isSignedIn]);
+
   const formatResponse = (content: string): string => {
     return content
       .replace(/\n/g, "<br />")

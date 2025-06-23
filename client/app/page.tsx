@@ -6,121 +6,144 @@ import FileUploadComponent from "../components/file-upload";
 import PDFListComponent from "../components/pdf-list";
 import { UserButton, SignInButton, useAuth, useUser } from "@clerk/nextjs";
 import { Menu, X } from "lucide-react";
-import { IMessage, IPDF, FetchPdfsResponse, FetchChatHistoryResponse } from "../app/types";
+import {
+  IMessage,
+  IPDF,
+  FetchPdfsResponse,
+  FetchChatHistoryResponse,
+} from "../app/types";
 
 export default function Home() {
   const { isSignedIn, getToken } = useAuth();
   const { user } = useUser();
   const [availablePDFs, setAvailablePDFs] = useState<IPDF[]>([]);
   const [selectedPDF, setSelectedPDF] = useState<string | null>(null);
-  const [chatHistories, setChatHistories] = useState<Record<string, IMessage[]>>({ all: [] });
+  const [chatHistories, setChatHistories] = useState<
+    Record<string, IMessage[]>
+  >({ all: [] });
   const [hasPDFs, setHasPDFs] = useState<boolean>(false);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState<boolean>(false);
   const [isInitialLoad, setIsInitialLoad] = useState<boolean>(true);
-  // Add loading states for each chat context
-  const [loadingStates, setLoadingStates] = useState<Record<string, boolean>>({});
+  const [loadingStates, setLoadingStates] = useState<Record<string, boolean>>(
+    {}
+  );
 
-const fetchAvailablePDFs = useCallback(async (): Promise<void> => {
-  if (!isSignedIn) {
+  // Clear all state when signing out
+  const clearAllState = useCallback(() => {
     setAvailablePDFs([]);
+    setSelectedPDF(null);
+    setChatHistories({ all: [] });
     setHasPDFs(false);
-    return;
-  }
+    setLoadingStates({});
+    setIsInitialLoad(true);
+  }, []);
 
-  try {
-    const token = await getToken();
-    const response = await fetch(`${process.env.NEXT_PUBLIC_ROOT_URL}/pdfs`, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    });
-    
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+  const fetchAvailablePDFs = useCallback(async (): Promise<void> => {
+    if (!isSignedIn) {
+      clearAllState();
+      return;
     }
-    
-    const data: FetchPdfsResponse = await response.json();
-
-    if (data.success && data.pdfs) {
-      setAvailablePDFs(data.pdfs);
-      setHasPDFs(data.pdfs.length > 0);
-
-      // Clear chat history if no PDFs remain
-      if (data.pdfs.length === 0) {
-        setChatHistories({ all: [] });
-        setSelectedPDF(null);
-        setLoadingStates({}); // Clear loading states
-      } else {
-        setChatHistories((prev) => {
-          const newHistories = { ...prev };
-          data.pdfs.forEach((pdf: IPDF) => {
-            if (!newHistories[pdf.collectionName]) {
-              newHistories[pdf.collectionName] = [];
-            }
-          });
-          return newHistories;
-        });
-        
-        // Initialize loading states for new PDFs
-        setLoadingStates((prev) => {
-          const newLoadingStates = { ...prev };
-          data.pdfs.forEach((pdf: IPDF) => {
-            if (!(pdf.collectionName in newLoadingStates)) {
-              newLoadingStates[pdf.collectionName] = false;
-            }
-          });
-          if (!('all' in newLoadingStates)) {
-            newLoadingStates['all'] = false;
-          }
-          return newLoadingStates;
-        });
-      }
-    } else {
-      setHasPDFs(false);
-      // Clear chat history when fetch fails or no PDFs
-      setChatHistories({ all: [] });
-      setSelectedPDF(null);
-      setLoadingStates({});
-    }
-  } catch (error) {
-    console.error("Error fetching PDFs:", error);
-    setHasPDFs(false);
-  } finally {
-    setIsInitialLoad(false);
-  }
-}, [isSignedIn, getToken]);
-
-  const fetchChatHistory = useCallback(async (collectionName: string | null): Promise<void> => {
-    if (!isSignedIn) return;
 
     try {
       const token = await getToken();
-      if (!token) {
-        throw new Error("No authentication token available");
-      }
-
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_ROOT_URL}/chat/history?collectionName=${collectionName || ""}`,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
-      );
+      const response = await fetch(`${process.env.NEXT_PUBLIC_ROOT_URL}/pdfs`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
 
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
 
-      const data: FetchChatHistoryResponse = await response.json();
+      const data: FetchPdfsResponse = await response.json();
 
-      if (data.success && data.messages) {
-        updateChatHistory(collectionName, data.messages);
+      if (data.success && data.pdfs) {
+        setAvailablePDFs(data.pdfs);
+        setHasPDFs(data.pdfs.length > 0);
+
+        if (data.pdfs.length === 0) {
+          setChatHistories({ all: [] });
+          setSelectedPDF(null);
+          setLoadingStates({});
+        } else {
+          setChatHistories((prev) => {
+            const newHistories = { ...prev };
+            data.pdfs.forEach((pdf: IPDF) => {
+              if (!newHistories[pdf.collectionName]) {
+                newHistories[pdf.collectionName] = [];
+              }
+            });
+            return newHistories;
+          });
+
+          setLoadingStates((prev) => {
+            const newLoadingStates = { ...prev };
+            data.pdfs.forEach((pdf: IPDF) => {
+              if (!(pdf.collectionName in newLoadingStates)) {
+                newLoadingStates[pdf.collectionName] = false;
+              }
+            });
+            if (!("all" in newLoadingStates)) {
+              newLoadingStates["all"] = false;
+            }
+            return newLoadingStates;
+          });
+        }
+      } else {
+        clearAllState();
       }
     } catch (error) {
-      console.error("Error fetching chat history:", error);
+      console.error("Error fetching PDFs:", error);
+      clearAllState();
+    } finally {
+      setIsInitialLoad(false);
     }
-  }, [isSignedIn, getToken]);
+  }, [isSignedIn, getToken, clearAllState]);
+
+  // Add useEffect to clear state when signing out
+  useEffect(() => {
+    if (!isSignedIn) {
+      clearAllState();
+    }
+  }, [isSignedIn, clearAllState]);
+
+  const fetchChatHistory = useCallback(
+    async (collectionName: string | null): Promise<void> => {
+      if (!isSignedIn) return;
+
+      try {
+        const token = await getToken();
+        if (!token) {
+          throw new Error("No authentication token available");
+        }
+
+        const response = await fetch(
+          `${process.env.NEXT_PUBLIC_ROOT_URL}/chat/history?collectionName=${
+            collectionName || ""
+          }`,
+          {
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+          }
+        );
+
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const data: FetchChatHistoryResponse = await response.json();
+
+        if (data.success && data.messages) {
+          updateChatHistory(collectionName, data.messages);
+        }
+      } catch (error) {
+        console.error("Error fetching chat history:", error);
+      }
+    },
+    [isSignedIn, getToken]
+  );
 
   // Single useEffect for initial data loading
   useEffect(() => {
@@ -148,16 +171,16 @@ const fetchAvailablePDFs = useCallback(async (): Promise<void> => {
     setMobileSidebarOpen(false);
   }, []);
 
-  const updateChatHistory = useCallback((
-    collectionName: string | null,
-    messages: IMessage[]
-  ): void => {
-    const key = collectionName || "all";
-    setChatHistories((prev) => ({
-      ...prev,
-      [key]: messages,
-    }));
-  }, []);
+  const updateChatHistory = useCallback(
+    (collectionName: string | null, messages: IMessage[]): void => {
+      const key = collectionName || "all";
+      setChatHistories((prev) => ({
+        ...prev,
+        [key]: messages,
+      }));
+    },
+    []
+  );
 
   const handleMobileMenuClick = useCallback((): void => {
     setMobileSidebarOpen(!mobileSidebarOpen);
@@ -226,19 +249,19 @@ const fetchAvailablePDFs = useCallback(async (): Promise<void> => {
             />
           )}
           {/* Only render chat when not in initial loading state */}
-            <ChatComponent
-              selectedPDF={selectedPDF}
-              chatHistory={
-                selectedPDF
-                  ? chatHistories[selectedPDF] || []
-                  : chatHistories["all"]
-              }
-              updateChatHistory={updateChatHistory}
-              availablePDFs={availablePDFs}
-              hasPDFs={hasPDFs}
-              loadingStates={loadingStates}
-              setLoadingStates={setLoadingStates}
-            />
+          <ChatComponent
+            selectedPDF={selectedPDF}
+            chatHistory={
+              selectedPDF
+                ? chatHistories[selectedPDF] || []
+                : chatHistories["all"]
+            }
+            updateChatHistory={updateChatHistory}
+            availablePDFs={availablePDFs}
+            hasPDFs={hasPDFs}
+            loadingStates={loadingStates}
+            setLoadingStates={setLoadingStates}
+          />
           {/* Show loading state during initial load */}
           {/* {isInitialLoad && (
             <div className="flex items-center justify-center h-full">

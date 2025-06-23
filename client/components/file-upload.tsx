@@ -31,6 +31,18 @@ const FileUploadComponent: React.FC<FileUploadComponentProps> = () => {
     }
   }, [jobId, uploadStatus]);
 
+  // Add this useEffect to clear upload state when signing out
+useEffect(() => {
+  if (!isSignedIn) {
+    setFileSize("");
+    setFileName("");
+    setUploadStatus(UploadStatus.IDLE);
+    setStatusMessage("");
+    setJobId(null);
+    setShowAuthPrompt(false);
+  }
+}, [isSignedIn]);
+
   const checkJobStatus = async (): Promise<void> => {
     if (!jobId) return;
 
