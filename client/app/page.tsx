@@ -226,7 +226,6 @@ const fetchAvailablePDFs = useCallback(async (): Promise<void> => {
             />
           )}
           {/* Only render chat when not in initial loading state */}
-          {!isInitialLoad && (
             <ChatComponent
               selectedPDF={selectedPDF}
               chatHistory={
@@ -240,13 +239,12 @@ const fetchAvailablePDFs = useCallback(async (): Promise<void> => {
               loadingStates={loadingStates}
               setLoadingStates={setLoadingStates}
             />
-          )}
           {/* Show loading state during initial load */}
-          {isInitialLoad && (
+          {/* {isInitialLoad && (
             <div className="flex items-center justify-center h-full">
               <div className="text-gray-400">Loading...</div>
             </div>
-          )}
+          )} */}
         </div>
       </div>
     </div>
