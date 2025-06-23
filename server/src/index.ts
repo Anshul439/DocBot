@@ -180,7 +180,7 @@ const worker = new Worker(
         console.log(`Loaded ${docs.length} document(s) from PDF`);
       } catch (loadError) {
         console.error(`Error loading PDF: ${loadError}`);
-        throw new Error(`Failed to load PDF: ${loadError.message}`);
+        throw new Error(`Failed to load PDF: ${(loadError as any).message}`);
       }
 
       if (!docs || docs.length === 0) {
