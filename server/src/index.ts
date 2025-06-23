@@ -120,22 +120,72 @@ const worker = new Worker(
       const data = JSON.parse(job.data);
       const userId = new mongoose.Types.ObjectId(data.userId);
 
+      // SOLUTION 3: Verify file exists in worker with retry logic
+      let fileExists = false;
+      let attempts = 0;
+      const maxAttempts = 5;
+      
+      while (!fileExists && attempts < maxAttempts) {
+        if (fs.existsSync(data.path)) {
+          // Also check if file is not empty and not being written to
+          const stats = fs.statSync(data.path);
+          if (stats.size > 0) {
+            // Wait a bit more to ensure file is fully written
+            await new Promise(resolve => setTimeout(resolve, 200));
+            
+            // Check size again to ensure it's stable
+            const newStats = fs.statSync(data.path);
+            if (newStats.size === stats.size) {
+              fileExists = true;
+              console.log(`File verified on attempt ${attempts + 1}: ${data.path} (${stats.size} bytes)`);
+            } else {
+              console.log(`File still being written, attempt ${attempts + 1}`);
+            }
+          } else {
+            console.log(`File is empty on attempt ${attempts + 1}`);
+          }
+        } else {
+          console.log(`File does not exist on attempt ${attempts + 1}: ${data.path}`);
+        }
+        
+        if (!fileExists) {
+          attempts++;
+          if (attempts < maxAttempts) {
+            console.log(`Waiting 1 second before retry...`);
+            await new Promise(resolve => setTimeout(resolve, 1000));
+          }
+        }
+      }
+
+      if (!fileExists) {
+        throw new Error(`File not found after ${maxAttempts} attempts: ${data.path}`);
+      }
+
       // Extract filename without extension to use as part of collection name
       const parsedPath = path.parse(data.path);
       const baseFilename = parsedPath.name;
 
       // Create a unique collection name for this PDF
-      // Format: pdf_{timestamp}_{filename}
       const collectionName = `pdf_${Date.now()}_${baseFilename
         .replace(/[^a-zA-Z0-9]/g, "_")
         .substring(0, 40)}`;
 
       console.log(`Creating new collection: ${collectionName}`);
 
-      // Load the PDF
-      const loader = new PDFLoader(data.path);
-      const docs = await loader.load();
-      console.log(`Loaded ${docs.length} document(s) from PDF`);
+      // Load the PDF with error handling
+      let docs;
+      try {
+        const loader = new PDFLoader(data.path);
+        docs = await loader.load();
+        console.log(`Loaded ${docs.length} document(s) from PDF`);
+      } catch (loadError) {
+        console.error(`Error loading PDF: ${loadError}`);
+        throw new Error(`Failed to load PDF: ${loadError.message}`);
+      }
+
+      if (!docs || docs.length === 0) {
+        throw new Error("No content found in PDF");
+      }
 
       // Create text splitter for better processing
       const textSplitter = new CharacterTextSplitter({
@@ -147,7 +197,9 @@ const worker = new Worker(
       const splitDocs = await textSplitter.splitDocuments(docs);
       console.log(`Split into ${splitDocs.length} chunks`);
 
-      const apiKey = process.env.GOOGLE_API_KEY as string;
+      if (splitDocs.length === 0) {
+        throw new Error("No chunks created from PDF content");
+      }
 
       // Initialize Gemini embeddings
       const embeddings = new GoogleGenerativeAIEmbeddings({
@@ -165,7 +217,7 @@ const worker = new Worker(
         // Create a new collection for this PDF
         await qdrantClient.createCollection(collectionName, {
           vectors: {
-            size: 768, // Size for Gemini embedding model
+            size: 768,
             distance: "Cosine",
           },
         });
@@ -188,6 +240,7 @@ const worker = new Worker(
         `Successfully added ${splitDocs.length} chunks to collection: ${collectionName}`
       );
 
+      // Save metadata to MongoDB
       const pdfMetadata = new PDFMetadata({
         userId: userId,
         originalFilename: data.filename,
@@ -204,11 +257,25 @@ const worker = new Worker(
       return { collectionName, chunks: splitDocs.length };
     } catch (error) {
       console.error("Error processing PDF:", error);
+      
+      // Clean up on error
+      if (job.data) {
+        try {
+          const data = JSON.parse(job.data);
+          if (data.path && fs.existsSync(data.path)) {
+            fs.unlinkSync(data.path);
+            console.log(`Cleaned up file after processing error: ${data.path}`);
+          }
+        } catch (cleanupError) {
+          console.error("Error during cleanup:", cleanupError);
+        }
+      }
+      
       throw error;
     }
   },
   {
-    concurrency: 5, // Limit concurrency to avoid overwhelming resources
+    concurrency: 5,
     connection: {
       username: "default",
       password: process.env.REDIS_PASSWORD,
@@ -274,6 +341,34 @@ app.post(
     const clerkUserId = (req as any).auth.userId;
 
     try {
+      // SOLUTION 1: Verify file exists before adding to queue
+      const filePath = req.file.path;
+      
+      // Wait a bit and verify file exists
+      await new Promise(resolve => setTimeout(resolve, 100)); // Small delay
+      
+      if (!fs.existsSync(filePath)) {
+        console.error(`File does not exist after upload: ${filePath}`);
+        res.status(500).json({
+          success: false,
+          error: "File upload failed - file not found",
+        });
+        return;
+      }
+
+      // Also check file size to ensure it's fully written
+      const stats = fs.statSync(filePath);
+      if (stats.size === 0) {
+        console.error(`File is empty after upload: ${filePath}`);
+        res.status(500).json({
+          success: false,
+          error: "File upload failed - empty file",
+        });
+        return;
+      }
+
+      console.log(`File verified: ${filePath} (${stats.size} bytes)`);
+
       // Find or create the user in your MongoDB
       const user = await User.findOneAndUpdate(
         { clerkId: clerkUserId },
@@ -285,12 +380,21 @@ app.post(
       const job = await queue.add(
         "file",
         JSON.stringify({
-          userId: user._id, // Store MongoDB user ID
-          clerkId: clerkUserId, // Also store Clerk ID if needed
+          userId: user._id,
+          clerkId: clerkUserId,
           filename: req.file.originalname,
           destination: req.file.destination,
-          path: req.file.path,
-        })
+          path: filePath, // Use the verified path
+        }),
+        {
+          // SOLUTION 2: Add job options for retry and delay
+          attempts: 3,
+          backoff: {
+            type: 'exponential',
+            delay: 2000,
+          },
+          delay: 500, // Wait 500ms before processing
+        }
       );
 
       res.json({
@@ -300,6 +404,17 @@ app.post(
       });
     } catch (error) {
       console.error("Error processing upload:", error);
+      
+      // Clean up file if it exists
+      if (req.file?.path && fs.existsSync(req.file.path)) {
+        try {
+          fs.unlinkSync(req.file.path);
+          console.log(`Cleaned up file after error: ${req.file.path}`);
+        } catch (cleanupError) {
+          console.error(`Error cleaning up file: ${cleanupError}`);
+        }
+      }
+      
       res.status(500).json({
         success: false,
         error: "Failed to process upload",
