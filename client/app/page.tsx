@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import ChatComponent from "../components/chat";
 import FileUploadComponent from "../components/file-upload";
 import PDFListComponent from "../components/pdf-list";
-import { UserButton, SignInButton, useAuth, useUser } from "@clerk/nextjs";
+import { UserButton, SignInButton, useAuth, useUser, SignUpButton } from "@clerk/nextjs";
 import { Menu, X } from "lucide-react";
 import {
   IMessage,
@@ -206,11 +206,18 @@ export default function Home() {
         </div>
         <div className="flex items-center space-x-4">
           {!isSignedIn ? (
-            <SignInButton mode="modal" forceRedirectUrl="/sync">
-              <button className="px-4 py-2 rounded-md bg-indigo-600 hover:bg-indigo-700 transition-colors text-sm md:text-base">
+            <>
+            <SignInButton mode="modal">
+              <button className="px-4 py-2 rounded-md bg-transparent hover:bg-[#252525] transition-colors border border-gray-700">
                 Sign In
               </button>
             </SignInButton>
+            <SignUpButton mode="modal" forceRedirectUrl={"/sync"}>
+              <button className="bg-indigo-600 hover:bg-indigo-700 text-white py-2 px-4 rounded-sm transition-colors text-sm md:text-base">
+                Sign Up
+              </button>
+            </SignUpButton>
+            </>
           ) : (
             <UserButton afterSignOutUrl="/" />
           )}

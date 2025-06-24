@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { SignInButton } from "@clerk/nextjs";
+import { SignInButton, SignUpButton } from "@clerk/nextjs";
 
 const SignInPrompt = ({ onClose }: { onClose: () => void }) => {
   const [isVisible, setIsVisible] = useState(false);
@@ -36,11 +36,18 @@ const SignInPrompt = ({ onClose }: { onClose: () => void }) => {
           Please sign in to use this feature.
         </p>
         <div className="flex flex-col gap-2 md:gap-4">
-          <SignInButton mode="modal" forceRedirectUrl="/sync">
-            <button className="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-2 px-4 rounded transition-colors text-sm md:text-base">
-              Sign In
-            </button>
-          </SignInButton>
+          <div className="flex gap-2 w-full">
+            <SignInButton mode="modal">
+              <button className="flex-1 px-4 py-2 rounded-md bg-transparent hover:bg-[#252525] transition-colors border border-gray-700">
+                Sign In
+              </button>
+            </SignInButton>
+            <SignUpButton mode="modal" forceRedirectUrl="/sync">
+              <button className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white py-2 px-4 rounded transition-colors text-sm md:text-base">
+                Sign Up
+              </button>
+            </SignUpButton>
+          </div>
           
           <button 
             onClick={handleClose}
