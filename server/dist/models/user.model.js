@@ -12,9 +12,6 @@ const userSchema = new mongoose_1.default.Schema({
     },
     email: String,
     name: String,
-    image: {
-        type: [String],
-    },
 }, { timestamps: true });
 const User = mongoose_1.default.model("User", userSchema);
 exports.default = User;

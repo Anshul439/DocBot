@@ -12,6 +12,8 @@ export default function SyncPage() {
   useEffect(() => {
     const handleUserSync = async () => {
       try {
+        console.log(user);
+        
         if (!userLoaded || !authLoaded) {
           console.log("Loading authentication...");
           return;
@@ -41,8 +43,7 @@ export default function SyncPage() {
             body: JSON.stringify({
               clerkId: user.id,
               email: user.emailAddresses[0].emailAddress,
-              firstName: user.firstName || "",
-              lastName: user.lastName || "",
+              name: user.fullName
             }),
           }
         );
