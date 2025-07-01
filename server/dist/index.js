@@ -261,7 +261,11 @@ const storage = multer_1.default.diskStorage({
 });
 const upload = (0, multer_1.default)({ storage: storage });
 const app = (0, express_1.default)();
-app.use((0, cors_1.default)());
+app.use((0, cors_1.default)({
+    origin: 'https://docbot-pdf-rag.vercel.app',
+    methods: ['GET', 'POST', 'PUT', 'DELETE'],
+    credentials: true
+}));
 app.use(express_1.default.json());
 app.get("/", (req, res) => {
     res.json({ status: "ok", message: "PDF Chat API is running" });

@@ -320,7 +320,14 @@ const storage = multer.diskStorage({
 const upload = multer({ storage: storage });
 
 const app = express();
-app.use(cors());
+import cors from 'cors';
+
+app.use(cors({
+  origin: 'https://docbot-pdf-rag.vercel.app',
+  methods: ['GET', 'POST', 'PUT', 'DELETE'],
+  credentials: true
+}));
+
 app.use(express.json());
 
 app.get("/", (req: Request, res: Response) => {
