@@ -39,9 +39,6 @@ const qdrantClient = new js_client_rest_1.QdrantClient({
     url: process.env.QDRANT_URL,
     apiKey: process.env.QDRANT_API_KEY,
 });
-// In-memory storage for current session PDFs
-let sessionPDFs = [];
-let sessionCollections = new Set();
 const queue = new bullmq_1.Queue("file-upload-queue", {
     connection: {
         username: "default",
@@ -102,7 +99,7 @@ const worker = new bullmq_1.Worker("file-upload-queue", (job) => __awaiter(void 
                 const stats = fs_1.default.statSync(data.path);
                 if (stats.size > 0) {
                     // Wait a bit more to ensure file is fully written
-                    yield new Promise(resolve => setTimeout(resolve, 200));
+                    yield new Promise((resolve) => setTimeout(resolve, 200));
                     // Check size again to ensure it's stable
                     const newStats = fs_1.default.statSync(data.path);
                     if (newStats.size === stats.size) {
@@ -124,7 +121,7 @@ const worker = new bullmq_1.Worker("file-upload-queue", (job) => __awaiter(void 
                 attempts++;
                 if (attempts < maxAttempts) {
                     console.log(`Waiting 1 second before retry...`);
-                    yield new Promise(resolve => setTimeout(resolve, 1000));
+                    yield new Promise((resolve) => setTimeout(resolve, 1000));
                 }
             }
         }
@@ -261,11 +258,7 @@ const storage = multer_1.default.diskStorage({
 });
 const upload = (0, multer_1.default)({ storage: storage });
 const app = (0, express_1.default)();
-app.use((0, cors_1.default)({
-    origin: ['https://docbot-pdf-rag.vercel.app', 'http://localhost:3000'],
-    methods: ['GET', 'POST', 'PUT', 'DELETE'],
-    credentials: true
-}));
+app.use((0, cors_1.default)());
 app.use(express_1.default.json());
 app.get("/", (req, res) => {
     res.json({ status: "ok", message: "PDF Chat API is running" });
@@ -282,7 +275,7 @@ app.post("/upload/pdf", clerk_middleware_js_1.clerkAuth, upload.single("pdf"), (
         // SOLUTION 1: Verify file exists before adding to queue
         const filePath = req.file.path;
         // Wait a bit and verify file exists
-        yield new Promise(resolve => setTimeout(resolve, 100)); // Small delay
+        yield new Promise((resolve) => setTimeout(resolve, 100)); // Small delay
         if (!fs_1.default.existsSync(filePath)) {
             console.error(`File does not exist after upload: ${filePath}`);
             res.status(500).json({
@@ -315,7 +308,7 @@ app.post("/upload/pdf", clerk_middleware_js_1.clerkAuth, upload.single("pdf"), (
             // SOLUTION 2: Add job options for retry and delay
             attempts: 3,
             backoff: {
-                type: 'exponential',
+                type: "exponential",
                 delay: 2000,
             },
             delay: 500, // Wait 500ms before processing
@@ -395,7 +388,7 @@ function isSummaryRequest(query) {
     return summaryKeywords.some((keyword) => lowercaseQuery.includes(keyword));
 }
 // Fixed helper function to get comprehensive content for summaries
-function getComprehensiveContent(collectionsToSearch, embeddings) {
+function getComprehensiveContent(collectionsToSearch, embeddings, userId) {
     return __awaiter(this, void 0, void 0, function* () {
         const allContent = [];
         console.log(`Attempting to get content from ${collectionsToSearch.length} collections`);
@@ -416,12 +409,18 @@ function getComprehensiveContent(collectionsToSearch, embeddings) {
                     console.error(`Collection ${collection} doesn't exist:`, collectionError);
                     continue;
                 }
-                // Get metadata from session storage
+                // Get metadata from MongoDB instead of session storage
                 let originalFilename = collection; // Default fallback
-                const pdfMetadata = sessionPDFs.find((pdf) => pdf.collectionName === collection);
+                const pdfMetadata = yield pdf_model_js_1.default.findOne({
+                    collectionName: collection,
+                    userId: userId,
+                });
                 if (pdfMetadata) {
                     originalFilename = pdfMetadata.originalFilename;
-                    console.log(`Found session metadata for ${collection}: ${originalFilename}`);
+                    console.log(`Found MongoDB metadata for ${collection}: ${originalFilename}`);
+                }
+                else {
+                    console.log(`No metadata found in MongoDB for ${collection}`);
                 }
                 // Get content from the collection using scroll (more reliable than similarity search for summaries)
                 try {
@@ -546,21 +545,6 @@ app.get("/chat", clerk_middleware_js_1.clerkAuth, (req, res) => __awaiter(void 0
             // Get all PDFs for this specific user
             const userPDFs = yield pdf_model_js_1.default.find({ userId: user._id });
             collectionsToSearch = userPDFs.map((pdf) => pdf.collectionName);
-            // Save user message to history
-            if (collectionsToSearch.length !== 0) {
-                try {
-                    yield chat_model_1.default.create({
-                        userId: user._id, // Use MongoDB user ID
-                        collectionName: collectionName || null,
-                        role: "user",
-                        content: userQuery,
-                        timestamp: new Date(),
-                    });
-                }
-                catch (error) {
-                    console.error("Error saving user message:", error);
-                }
-            }
             if (collectionsToSearch.length === 0) {
                 res.json({
                     success: false,
@@ -568,6 +552,21 @@ app.get("/chat", clerk_middleware_js_1.clerkAuth, (req, res) => __awaiter(void 0
                     message: "Please upload a PDF before asking questions.",
                 });
                 return;
+            }
+        }
+        // FIXED: Save user message to history for ALL cases (both specific PDF and all PDFs)
+        if (collectionsToSearch.length > 0) {
+            try {
+                yield chat_model_1.default.create({
+                    userId: user._id, // Use MongoDB user ID
+                    collectionName: collectionName || null, // This will be null for "all PDFs" and the specific collection name for individual PDFs
+                    role: "user",
+                    content: userQuery,
+                    timestamp: new Date(),
+                });
+            }
+            catch (error) {
+                console.error("Error saving user message:", error);
             }
         }
         const apiKey = process.env.GOOGLE_API_KEY;
@@ -582,7 +581,7 @@ app.get("/chat", clerk_middleware_js_1.clerkAuth, (req, res) => __awaiter(void 0
         if (isSummary) {
             console.log(`Detected summary request`);
             isSummaryResponse = true;
-            const comprehensiveContent = yield getComprehensiveContent(collectionsToSearch, embeddings);
+            const comprehensiveContent = yield getComprehensiveContent(collectionsToSearch, embeddings, user._id);
             if (comprehensiveContent.length === 0) {
                 responseText =
                     "I couldn't find sufficient content in the uploaded PDFs to create a summary.";
@@ -648,19 +647,12 @@ Please provide a comprehensive summary:`;
                     const docs = yield vectorStore.similaritySearch(userQuery, 4);
                     if (docs.length > 0) {
                         let originalFilename = collection;
-                        const pdfMetadata = sessionPDFs.find((pdf) => pdf.collectionName === collection);
+                        const pdfMetadata = yield pdf_model_js_1.default.findOne({
+                            collectionName: collection,
+                            userId: user._id,
+                        });
                         if (pdfMetadata) {
                             originalFilename = pdfMetadata.originalFilename;
-                        }
-                        else {
-                            // Fallback: get from database
-                            const dbPdf = yield pdf_model_js_1.default.findOne({
-                                collectionName: collection,
-                                userId: user._id,
-                            });
-                            if (dbPdf) {
-                                originalFilename = dbPdf.originalFilename;
-                            }
                         }
                         const docsWithCollection = docs.map((doc) => (Object.assign(Object.assign({}, doc), { metadata: Object.assign(Object.assign({}, doc.metadata), { collectionName: collection, originalFilename: originalFilename }) })));
                         allRelevantDocs.push(...docsWithCollection);

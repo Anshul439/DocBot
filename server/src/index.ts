@@ -21,15 +21,6 @@ import ChatMessage from "./models/chat.model";
 import { clerkAuth } from "./middlewares/clerk.middleware.js";
 import User from "./models/user.model.js";
 
-interface PDFData {
-  filename: string;
-  originalFilename: string;
-  collectionName: string;
-  uploadTime: Date;
-  chunks: number;
-  filePath: string;
-}
-
 interface ComprehensiveContent {
   filename: string;
   collectionName: string;
@@ -57,10 +48,6 @@ const qdrantClient = new QdrantClient({
   url: process.env.QDRANT_URL,
   apiKey: process.env.QDRANT_API_KEY,
 });
-
-// In-memory storage for current session PDFs
-let sessionPDFs: PDFData[] = [];
-let sessionCollections: Set<string> = new Set();
 
 const queue = new Queue("file-upload-queue", {
   connection: {
@@ -124,20 +111,24 @@ const worker = new Worker(
       let fileExists = false;
       let attempts = 0;
       const maxAttempts = 5;
-      
+
       while (!fileExists && attempts < maxAttempts) {
         if (fs.existsSync(data.path)) {
           // Also check if file is not empty and not being written to
           const stats = fs.statSync(data.path);
           if (stats.size > 0) {
             // Wait a bit more to ensure file is fully written
-            await new Promise(resolve => setTimeout(resolve, 200));
-            
+            await new Promise((resolve) => setTimeout(resolve, 200));
+
             // Check size again to ensure it's stable
             const newStats = fs.statSync(data.path);
             if (newStats.size === stats.size) {
               fileExists = true;
-              console.log(`File verified on attempt ${attempts + 1}: ${data.path} (${stats.size} bytes)`);
+              console.log(
+                `File verified on attempt ${attempts + 1}: ${data.path} (${
+                  stats.size
+                } bytes)`
+              );
             } else {
               console.log(`File still being written, attempt ${attempts + 1}`);
             }
@@ -145,20 +136,24 @@ const worker = new Worker(
             console.log(`File is empty on attempt ${attempts + 1}`);
           }
         } else {
-          console.log(`File does not exist on attempt ${attempts + 1}: ${data.path}`);
+          console.log(
+            `File does not exist on attempt ${attempts + 1}: ${data.path}`
+          );
         }
-        
+
         if (!fileExists) {
           attempts++;
           if (attempts < maxAttempts) {
             console.log(`Waiting 1 second before retry...`);
-            await new Promise(resolve => setTimeout(resolve, 1000));
+            await new Promise((resolve) => setTimeout(resolve, 1000));
           }
         }
       }
 
       if (!fileExists) {
-        throw new Error(`File not found after ${maxAttempts} attempts: ${data.path}`);
+        throw new Error(
+          `File not found after ${maxAttempts} attempts: ${data.path}`
+        );
       }
 
       // Extract filename without extension to use as part of collection name
@@ -257,7 +252,7 @@ const worker = new Worker(
       return { collectionName, chunks: splitDocs.length };
     } catch (error) {
       console.error("Error processing PDF:", error);
-      
+
       // Clean up on error
       if (job.data) {
         try {
@@ -270,7 +265,7 @@ const worker = new Worker(
           console.error("Error during cleanup:", cleanupError);
         }
       }
-      
+
       throw error;
     }
   },
@@ -320,13 +315,7 @@ const storage = multer.diskStorage({
 const upload = multer({ storage: storage });
 
 const app = express();
-
-app.use(cors({
-  origin: ['https://docbot-pdf-rag.vercel.app', 'http://localhost:3000'],
-  methods: ['GET', 'POST', 'PUT', 'DELETE'],
-  credentials: true
-}));
-
+app.use(cors());
 app.use(express.json());
 
 app.get("/", (req: Request, res: Response) => {
@@ -349,10 +338,10 @@ app.post(
     try {
       // SOLUTION 1: Verify file exists before adding to queue
       const filePath = req.file.path;
-      
+
       // Wait a bit and verify file exists
-      await new Promise(resolve => setTimeout(resolve, 100)); // Small delay
-      
+      await new Promise((resolve) => setTimeout(resolve, 100)); // Small delay
+
       if (!fs.existsSync(filePath)) {
         console.error(`File does not exist after upload: ${filePath}`);
         res.status(500).json({
@@ -396,7 +385,7 @@ app.post(
           // SOLUTION 2: Add job options for retry and delay
           attempts: 3,
           backoff: {
-            type: 'exponential',
+            type: "exponential",
             delay: 2000,
           },
           delay: 500, // Wait 500ms before processing
@@ -410,7 +399,7 @@ app.post(
       });
     } catch (error) {
       console.error("Error processing upload:", error);
-      
+
       // Clean up file if it exists
       if (req.file?.path && fs.existsSync(req.file.path)) {
         try {
@@ -420,7 +409,7 @@ app.post(
           console.error(`Error cleaning up file: ${cleanupError}`);
         }
       }
-      
+
       res.status(500).json({
         success: false,
         error: "Failed to process upload",
@@ -491,7 +480,8 @@ function isSummaryRequest(query: string): boolean {
 // Fixed helper function to get comprehensive content for summaries
 async function getComprehensiveContent(
   collectionsToSearch: string[],
-  embeddings: GoogleGenerativeAIEmbeddings
+  embeddings: GoogleGenerativeAIEmbeddings,
+  userId: mongoose.Types.ObjectId
 ): Promise<ComprehensiveContent[]> {
   const allContent: ComprehensiveContent[] = [];
 
@@ -525,16 +515,20 @@ async function getComprehensiveContent(
         continue;
       }
 
-      // Get metadata from session storage
+      // Get metadata from MongoDB instead of session storage
       let originalFilename = collection; // Default fallback
-      const pdfMetadata = sessionPDFs.find(
-        (pdf) => pdf.collectionName === collection
-      );
+      const pdfMetadata = await PDFMetadata.findOne({
+        collectionName: collection,
+        userId: userId,
+      });
+
       if (pdfMetadata) {
         originalFilename = pdfMetadata.originalFilename;
         console.log(
-          `Found session metadata for ${collection}: ${originalFilename}`
+          `Found MongoDB metadata for ${collection}: ${originalFilename}`
         );
+      } else {
+        console.log(`No metadata found in MongoDB for ${collection}`);
       }
 
       // Get content from the collection using scroll (more reliable than similarity search for summaries)
@@ -697,21 +691,6 @@ app.get(
         const userPDFs = await PDFMetadata.find({ userId: user._id });
         collectionsToSearch = userPDFs.map((pdf) => pdf.collectionName);
 
-        // Save user message to history
-        if (collectionsToSearch.length !== 0) {
-          try {
-            await ChatMessage.create({
-              userId: user._id, // Use MongoDB user ID
-              collectionName: collectionName || null,
-              role: "user",
-              content: userQuery,
-              timestamp: new Date(),
-            });
-          } catch (error) {
-            console.error("Error saving user message:", error);
-          }
-        }
-
         if (collectionsToSearch.length === 0) {
           res.json({
             success: false,
@@ -719,6 +698,21 @@ app.get(
             message: "Please upload a PDF before asking questions.",
           });
           return;
+        }
+      }
+
+      // FIXED: Save user message to history for ALL cases (both specific PDF and all PDFs)
+      if (collectionsToSearch.length > 0) {
+        try {
+          await ChatMessage.create({
+            userId: user._id, // Use MongoDB user ID
+            collectionName: collectionName || null, // This will be null for "all PDFs" and the specific collection name for individual PDFs
+            role: "user",
+            content: userQuery,
+            timestamp: new Date(),
+          });
+        } catch (error) {
+          console.error("Error saving user message:", error);
         }
       }
 
@@ -739,7 +733,8 @@ app.get(
 
         const comprehensiveContent = await getComprehensiveContent(
           collectionsToSearch,
-          embeddings
+          embeddings,
+          user._id
         );
 
         if (comprehensiveContent.length === 0) {
@@ -820,20 +815,12 @@ Please provide a comprehensive summary:`;
 
             if (docs.length > 0) {
               let originalFilename = collection;
-              const pdfMetadata = sessionPDFs.find(
-                (pdf) => pdf.collectionName === collection
-              );
+              const pdfMetadata = await PDFMetadata.findOne({
+                collectionName: collection,
+                userId: user._id,
+              });
               if (pdfMetadata) {
                 originalFilename = pdfMetadata.originalFilename;
-              } else {
-                // Fallback: get from database
-                const dbPdf = await PDFMetadata.findOne({
-                  collectionName: collection,
-                  userId: user._id,
-                });
-                if (dbPdf) {
-                  originalFilename = dbPdf.originalFilename;
-                }
               }
 
               const docsWithCollection = docs.map((doc) => ({
@@ -989,7 +976,7 @@ app.delete(
           success: false,
           error: "User not found",
         });
-        return
+        return;
       }
 
       // 2. Find and validate PDF ownership
@@ -1004,7 +991,7 @@ app.delete(
           success: false,
           error: "PDF not found or not owned by user",
         });
-        return
+        return;
       }
 
       console.log(`Found PDF to delete: ${pdfToDelete.originalFilename}`);
@@ -1027,7 +1014,7 @@ app.delete(
           success: false,
           error: "Failed to delete PDF from database",
         });
-        return
+        return;
       }
 
       console.log(
