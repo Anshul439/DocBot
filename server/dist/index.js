@@ -262,7 +262,7 @@ const storage = multer_1.default.diskStorage({
 const upload = (0, multer_1.default)({ storage: storage });
 const app = (0, express_1.default)();
 app.use((0, cors_1.default)({
-    origin: 'https://docbot-pdf-rag.vercel.app',
+    origin: ['https://docbot-pdf-rag.vercel.app', 'http://localhost:3000'],
     methods: ['GET', 'POST', 'PUT', 'DELETE'],
     credentials: true
 }));
