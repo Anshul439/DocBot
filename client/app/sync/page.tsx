@@ -13,16 +13,16 @@ export default function SyncPage() {
     const handleUserSync = async () => {
       try {
         if (!userLoaded || !authLoaded) {
-          console.log("Loading authentication...");
+          // console.log("Loading authentication...");
           return;
         }
 
         if (!user?.id || !user.emailAddresses?.[0]?.emailAddress) {
-          console.log("Loading user data...");
+          // console.log("Loading user data...");
           return;
         }
 
-        console.log("Syncing user data...");
+        // console.log("Syncing user data...");
 
         const token = await getToken();
 
@@ -52,15 +52,15 @@ export default function SyncPage() {
         }
 
         // Wait for the response to complete before redirecting
-        const result = await syncRes.json();
-        console.log("Sync completed:", result);
-        console.log("Redirecting...");
+        // const result = await syncRes.json();
+        // console.log("Sync completed:", result);
+        // console.log("Redirecting...");
 
         // Redirect after successful sync
         setTimeout(() => router.push("/"), 500);
       } catch (err) {
-        console.error("Error during user sync:", err);
-        console.log("Error occurred - redirecting...");
+        // console.error("Error during user sync:", err);
+        // console.log("Error occurred - redirecting...");
 
         // Still redirect on error, but with a longer delay
         setTimeout(() => router.push("/"), 1500);
@@ -74,7 +74,7 @@ export default function SyncPage() {
     <div className="flex flex-col items-center justify-center min-h-screen p-4 bg-[#000000f7]">
       <div className="text-center">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
-        <p className="text-white mt-4">Syncing your account...</p>
+        {/* <p className="text-white mt-4">Syncing your account...</p> */}
       </div>
     </div>
   );
