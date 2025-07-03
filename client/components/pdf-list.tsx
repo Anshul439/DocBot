@@ -124,46 +124,47 @@ const PDFListComponent: React.FC<PDFListComponentProps> = ({
             }`}
           >
             <button
-  key={pdf.collectionName}
-  onClick={() => setSelectedPDF(pdf.collectionName)}
-  className={`w-full text-left rounded-md ${
-    selectedPDF === pdf.collectionName
-      ? "bg-indigo-600 text-white"
-      : "bg-[#1A1A1A] text-gray-300 hover:bg-[#252525]"
-  }`}
-  aria-label={`Select ${pdf.originalFilename}`}
->
-  <div className="text-xs md:text-sm px-3 py-2 md:px-4 md:py-3 flex items-center justify-between">
-    <div className="flex-1 overflow-hidden">
-      <div className="font-medium truncate">
-        {pdf.originalFilename}
-      </div>
-      <div className="text-xs opacity-70 mt-1 flex items-center space-x-2">
-        <span>{pdf.chunks} pages</span>
-      </div>
-    </div>
-    <div 
-      role="button"
-      aria-label={`Delete ${pdf.originalFilename}`}
-      tabIndex={0}
-      onClick={(e) => {
-        e.stopPropagation();
-        const syntheticEvent = e as React.MouseEvent<HTMLButtonElement>;
-        handleDeletePDF(pdf.collectionName, syntheticEvent);
-      }}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter' || e.key === ' ') {
-          e.preventDefault();
-          const syntheticEvent = e as unknown as React.MouseEvent<HTMLButtonElement>;
-          handleDeletePDF(pdf.collectionName, syntheticEvent);
-        }
-      }}
-      className="ml-2 p-1 md:p-1.5 text-inherit opacity-60 hover:opacity-100 rounded hover:bg-black hover:bg-opacity-20 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
-    >
-      <Trash2Icon size={14} className="md:w-4 md:h-4" />
-    </div>
-  </div>
-</button>
+              key={pdf.collectionName}
+              onClick={() => setSelectedPDF(pdf.collectionName)}
+              className={`w-full text-left rounded-md ${
+                selectedPDF === pdf.collectionName
+                  ? "bg-indigo-600 text-white"
+                  : "bg-[#1A1A1A] text-gray-300 hover:bg-[#252525]"
+              }`}
+              aria-label={`Select ${pdf.originalFilename}`}
+            >
+              <div className="text-xs md:text-sm px-3 py-2 md:px-4 md:py-3 flex items-center justify-between">
+                <div className="flex-1 overflow-hidden">
+                  <div className="font-medium truncate">
+                    {pdf.originalFilename}
+                  </div>
+                  <div className="text-xs opacity-70 mt-1 flex items-center space-x-2">
+                    <span>{pdf.chunks} pages</span>
+                  </div>
+                </div>
+                <div
+                  role="button"
+                  aria-label={`Delete ${pdf.originalFilename}`}
+                  tabIndex={0}
+                  onClick={(e: React.MouseEvent<HTMLDivElement>) => {
+                    e.stopPropagation();
+                    handleDeletePDF(pdf.collectionName, e);
+                  }}
+                  onKeyDown={(e: React.KeyboardEvent<HTMLDivElement>) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      handleDeletePDF(
+                        pdf.collectionName,
+                        e as unknown as React.MouseEvent
+                      );
+                    }
+                  }}
+                  className="ml-2 p-1 md:p-1.5 text-inherit opacity-60 hover:opacity-100 rounded hover:bg-black hover:bg-opacity-20 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                >
+                  <Trash2Icon size={14} className="md:w-4 md:h-4" />
+                </div>
+              </div>
+            </button>
           </div>
         ))}
       </div>

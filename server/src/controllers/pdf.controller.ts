@@ -14,8 +14,6 @@ import User from "../models/user.model";
 import { queue } from "../index";
 import { ComprehensiveContent, DocumentResult } from "../types/pdf.types";
 
-
-
 // Fixed helper function to get comprehensive content for summaries
 async function getComprehensiveContent(
   collectionsToSearch: string[],
@@ -69,7 +67,6 @@ async function getComprehensiveContent(
       } else {
         console.log(`No metadata found in MongoDB for ${collection}`);
       }
-
 
       try {
         const scrollResponse = await qdrantClient.scroll(collection, {
@@ -423,7 +420,7 @@ export const chatWithPdf = async (
       const comprehensiveContent = await getComprehensiveContent(
         collectionsToSearch,
         embeddings,
-        user._id
+        user._id as mongoose.Types.ObjectId
       );
 
       if (comprehensiveContent.length === 0) {
@@ -442,7 +439,7 @@ ${pdf.content}
           )
           .join("\n\n");
 
-      const SUMMARY_PROMPT = `
+        const SUMMARY_PROMPT = `
 You are an expert at analyzing and summarizing PDF documents. 
 Your task is to create a comprehensive, well-structured summary based on the following content from ${comprehensiveContent.length} PDF document(s).
 
@@ -464,9 +461,9 @@ Please provide a detailed, well-structured summary:`;
 
         const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
         const geminiResponse = await model.generateContent(SUMMARY_PROMPT);
-        responseText = geminiResponse.response.text().replace(/_\*/g, '') // Remove italic markers
+        responseText = geminiResponse.response.text().replace(/_\*/g, ""); // Remove italic markers
 
-         documents = [];
+        documents = [];
       }
     } else {
       // Regular question answering

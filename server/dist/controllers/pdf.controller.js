@@ -380,7 +380,7 @@ User Request: "${userQuery}"
 Please provide a detailed, well-structured summary:`;
                 const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
                 const geminiResponse = yield model.generateContent(SUMMARY_PROMPT);
-                responseText = geminiResponse.response.text().replace(/_\*/g, ''); // Remove italic markers
+                responseText = geminiResponse.response.text().replace(/_\*/g, ""); // Remove italic markers
                 documents = [];
             }
         }
