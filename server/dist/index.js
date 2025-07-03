@@ -35,13 +35,22 @@ const qdrantClient = new js_client_rest_1.QdrantClient({
     url: process.env.QDRANT_URL,
     apiKey: process.env.QDRANT_API_KEY,
 });
+const redisConnectionConfig = {
+    username: "default",
+    password: process.env.REDIS_PASSWORD,
+    host: process.env.REDIS_URL,
+    port: 10979,
+    // Essential fixes for connection stability
+    retryDelayOnFailover: 100,
+    maxRetriesPerRequest: 3,
+    enableReadyCheck: true,
+    lazyConnect: true,
+    // Keep connection alive during idle periods
+    keepAlive: 30000,
+    connectTimeout: 10000,
+};
 exports.queue = new bullmq_1.Queue("file-upload-queue", {
-    connection: {
-        username: "default",
-        password: process.env.REDIS_PASSWORD,
-        host: process.env.REDIS_URL,
-        port: 10979,
-    },
+    connection: redisConnectionConfig
 });
 // const cleanupOldCollections = async () => {
 //   try {
@@ -214,12 +223,7 @@ const worker = new bullmq_1.Worker("file-upload-queue", (job) => __awaiter(void 
     }
 }), {
     concurrency: 5,
-    connection: {
-        username: "default",
-        password: process.env.REDIS_PASSWORD,
-        host: process.env.REDIS_URL,
-        port: 10979,
-    },
+    connection: redisConnectionConfig
 });
 // Worker event handlers
 worker.on("error", (err) => {
