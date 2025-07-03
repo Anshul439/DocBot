@@ -69,7 +69,7 @@ const PDFListComponent: React.FC<PDFListComponentProps> = ({
       // Update the PDF list
       onRefresh(updatedPDFs);
 
-      console.log(`Successfully deleted PDF: ${collectionName}`);
+      // console.log(`Successfully deleted PDF: ${collectionName}`);
     } catch (error) {
       console.error("Error deleting PDF:", error);
 

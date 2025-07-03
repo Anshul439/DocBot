@@ -90,7 +90,7 @@ useEffect(() => {
 
     try {
       const token = await getToken();
-      console.log(token);
+      // console.log(token);
       
       const formData = new FormData();
       formData.append("pdf", selectedFile);
@@ -102,7 +102,7 @@ useEffect(() => {
         },
         body: formData
       });
-      console.log(response);
+      // console.log(response);
       
 
       const data = await response.json();
