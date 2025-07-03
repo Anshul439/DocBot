@@ -14,6 +14,8 @@ import User from "../models/user.model";
 import { queue } from "../index";
 import { ComprehensiveContent, DocumentResult } from "../types/pdf.types";
 
+
+
 // Fixed helper function to get comprehensive content for summaries
 async function getComprehensiveContent(
   collectionsToSearch: string[],
@@ -68,6 +70,7 @@ async function getComprehensiveContent(
         console.log(`No metadata found in MongoDB for ${collection}`);
       }
 
+      // Get content from the collection using scroll (more reliable than similarity search for summaries)
       try {
         const scrollResponse = await qdrantClient.scroll(collection, {
           limit: 15, // Get more chunks for better summary
@@ -440,30 +443,37 @@ ${pdf.content}
           .join("\n\n");
 
         const SUMMARY_PROMPT = `
-You are an expert at analyzing and summarizing PDF documents. 
-Your task is to create a comprehensive, well-structured summary based on the following content from ${comprehensiveContent.length} PDF document(s).
+You are an AI assistant that creates comprehensive summaries of PDF documents.
+Based on the provided content from ${
+          comprehensiveContent.length
+        } PDF document(s), create a detailed summary.
 
-Guidelines:
-1. Analyze the content thoroughly and identify the most important information
-2. Create a coherent summary that flows naturally
-3. Include key points, findings, and conclusions
-4. Maintain the original meaning and context
-5. Organize the information logically based on the content
-6. Don't mention "the document states" or similar phrases - just present the information directly
-7. For multiple PDFs, identify connections or contrasts between them
+${
+  comprehensiveContent.length > 1
+    ? `For each PDF, provide:
+1. Main topics and themes
+2. Key findings or important information
+3. Any notable conclusions or recommendations
 
-PDF Content:
+Then provide an overall synthesis of all documents together.`
+    : `Provide:
+1. Main topics and themes covered in the document
+2. Key findings or important information
+3. Any notable conclusions or recommendations`
+}
+
+CONTENT FROM ${comprehensiveContent.length} PDF(s):
 ${summaryContext}
 
-User Request: "${userQuery}"
+USER REQUEST: ${userQuery}
 
-Please provide a detailed, well-structured summary:`;
+Please provide a comprehensive summary:`;
 
         const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
         const geminiResponse = await model.generateContent(SUMMARY_PROMPT);
         responseText = geminiResponse.response.text().replace(/_\*/g, ""); // Remove italic markers
 
-        documents = [];
+        documents = []
       }
     } else {
       // Regular question answering
@@ -548,7 +558,7 @@ Please provide a detailed answer based on the information in the documents:`;
 
         const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
         const geminiResponse = await model.generateContent(QA_PROMPT);
-        responseText = geminiResponse.response.text();
+        responseText = geminiResponse.response.text().replace(/_\*/g, ""); // Remove italic markers
         documents = allRelevantDocs.map((doc) => ({
           pageContent: doc.pageContent,
           metadata: doc.metadata,
