@@ -25,7 +25,6 @@ const PDFListComponent: React.FC<PDFListComponentProps> = ({
   ) => {
     event.stopPropagation();
 
-    // Prevent multiple clicks
     const button = event.currentTarget as HTMLButtonElement;
     if (button.disabled) return;
 
@@ -56,56 +55,40 @@ const PDFListComponent: React.FC<PDFListComponentProps> = ({
         );
       }
 
-      // Success: Update UI state
       const updatedPDFs = pdfs.filter(
         (pdf) => pdf.collectionName !== collectionName
       );
 
-      // If the deleted PDF was selected, clear selection
       if (selectedPDF === collectionName) {
         setSelectedPDF(null);
       }
 
-      // Update the PDF list
       onRefresh(updatedPDFs);
-
-      // console.log(`Successfully deleted PDF: ${collectionName}`);
     } catch (error) {
       console.error("Error deleting PDF:", error);
-
-      // Show user-friendly error message
-      const errorMessage =
-        error instanceof Error ? error.message : "Failed to delete PDF";
-      alert(`Error: ${errorMessage}`);
-
-      // Re-enable button
+      alert(
+        error instanceof Error ? error.message : "Failed to delete PDF"
+      );
       button.disabled = false;
       button.classList.remove("opacity-50", "cursor-not-allowed");
-
-      // Refresh to get current state from server
       onRefresh();
     }
   };
 
   if (!pdfs || pdfs.length === 0) {
     return (
-      <div className="flex-1 flex items-center justify-center text-gray-500 text-sm">
+      <div className="flex-1 flex items-center justify-center text-gray-500 text-xs sm:text-sm">
         No PDFs uploaded yet
       </div>
     );
   }
 
   return (
-    <div
-      className="flex-1 overflow-y-auto  [&::-webkit-scrollbar]:w-2 Add commentMore actions
-    [&::-webkit-scrollbar-thumb]:rounded-full 
-    [&::-webkit-scrollbar-thumb]:bg-gray-700 
-    [&::-webkit-scrollbar-track]:bg-gray-900"
-    >
-      <div className="space-y-1 md:space-y-2">
+    <div className="flex-1 overflow-y-auto">
+      <div className="space-y-1">
         <button
           onClick={() => setSelectedPDF(null)}
-          className={`w-full text-left text-xs md:text-sm px-3 py-2 md:px-4 md:py-3 rounded-md flex items-center justify-between ${
+          className={`w-full text-left text-xs sm:text-sm px-2 py-1.5 sm:px-3 sm:py-2 rounded-md flex items-center justify-between ${
             selectedPDF === null
               ? "bg-indigo-600 text-white"
               : "bg-[#1A1A1A] text-gray-300 hover:bg-[#252525]"
@@ -124,21 +107,15 @@ const PDFListComponent: React.FC<PDFListComponentProps> = ({
             }`}
           >
             <button
-              key={pdf.collectionName}
               onClick={() => setSelectedPDF(pdf.collectionName)}
-              className={`w-full text-left rounded-md ${
-                selectedPDF === pdf.collectionName
-                  ? "bg-indigo-600 text-white"
-                  : "bg-[#1A1A1A] text-gray-300 hover:bg-[#252525]"
-              }`}
-              aria-label={`Select ${pdf.originalFilename}`}
+              className="w-full text-left rounded-md"
             >
-              <div className="text-xs md:text-sm px-3 py-2 md:px-4 md:py-3 flex items-center justify-between">
+              <div className="text-xs sm:text-sm px-2 py-1.5 sm:px-3 sm:py-2 flex items-center justify-between">
                 <div className="flex-1 overflow-hidden">
                   <div className="font-medium truncate">
                     {pdf.originalFilename}
                   </div>
-                  <div className="text-xs opacity-70 mt-1 flex items-center space-x-2">
+                  <div className="text-2xs opacity-70 mt-0.5 flex items-center space-x-1">
                     <span>{pdf.chunks} pages</span>
                   </div>
                 </div>
@@ -146,11 +123,8 @@ const PDFListComponent: React.FC<PDFListComponentProps> = ({
                   role="button"
                   aria-label={`Delete ${pdf.originalFilename}`}
                   tabIndex={0}
-                  onClick={(e: React.MouseEvent<HTMLDivElement>) => {
-                    e.stopPropagation();
-                    handleDeletePDF(pdf.collectionName, e);
-                  }}
-                  onKeyDown={(e: React.KeyboardEvent<HTMLDivElement>) => {
+                  onClick={(e) => handleDeletePDF(pdf.collectionName, e)}
+                  onKeyDown={(e) => {
                     if (e.key === "Enter" || e.key === " ") {
                       e.preventDefault();
                       handleDeletePDF(
@@ -159,9 +133,9 @@ const PDFListComponent: React.FC<PDFListComponentProps> = ({
                       );
                     }
                   }}
-                  className="ml-2 p-1 md:p-1.5 text-inherit opacity-60 hover:opacity-100 rounded hover:bg-black hover:bg-opacity-20 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                  className="ml-1 p-1 text-inherit opacity-60 hover:opacity-100 rounded hover:bg-black hover:bg-opacity-20 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  <Trash2Icon size={14} className="md:w-4 md:h-4" />
+                  <Trash2Icon size={12} className="sm:w-4 sm:h-4" />
                 </div>
               </div>
             </button>

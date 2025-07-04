@@ -7,15 +7,15 @@ export default async function Home() {
 
   return (
     <div className="bg-[#000000f7] text-white h-screen flex flex-col">
-      {/* Header - Server rendered */}
-      <div className="p-4 border-b border-gray-800 flex justify-between items-center">
-        <div className="flex items-center space-x-4">
-          <h1 className="text-2xl font-bold">DocBot</h1>
+      {/* Header with extra bottom padding */}
+      <div className="p-3 sm:p-4 pb-4 border-b border-gray-800 flex justify-between items-center">
+        <div className="flex items-center space-x-2 sm:space-x-4">
+          <h1 className="text-lg sm:text-xl font-bold">DocBot</h1>
         </div>
-        <div className="flex items-center space-x-4">
+        <div className="flex items-center space-x-2 sm:space-x-4">
           {!userId ? (
             <SignInButton mode="modal" forceRedirectUrl={"/sync"}>
-              <button className="bg-indigo-600 hover:bg-indigo-700 text-white py-2 px-4 rounded-sm transition-colors text-sm md:text-base">
+              <button className="bg-indigo-600 hover:bg-indigo-700 text-white py-1.5 px-3 sm:py-2 sm:px-4 rounded-sm transition-colors text-xs sm:text-sm md:text-base">
                 Sign In
               </button>
             </SignInButton>
@@ -25,7 +25,6 @@ export default async function Home() {
         </div>
       </div>
 
-      {/* Client-side content */}
       <ClientHomePage isSignedIn={!!userId} />
     </div>
   );

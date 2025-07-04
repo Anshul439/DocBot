@@ -32,10 +32,8 @@ export default function ClientHomePage({ isSignedIn: serverIsSignedIn }: ClientH
     {}
   );
 
-  // Use server-side auth state initially to prevent hydration mismatch
   const effectiveIsSignedIn = isSignedIn ?? serverIsSignedIn;
 
-  // Clear all state when signing out
   const clearAllState = useCallback(() => {
     setAvailablePDFs([]);
     setSelectedPDF(null);
@@ -108,7 +106,6 @@ export default function ClientHomePage({ isSignedIn: serverIsSignedIn }: ClientH
     }
   }, [effectiveIsSignedIn, getToken, clearAllState]);
 
-  // Add useEffect to clear state when signing out
   useEffect(() => {
     if (!effectiveIsSignedIn) {
       clearAllState();
@@ -152,7 +149,6 @@ export default function ClientHomePage({ isSignedIn: serverIsSignedIn }: ClientH
     [effectiveIsSignedIn, getToken]
   );
 
-  // Single useEffect for initial data loading
   useEffect(() => {
     if (user && effectiveIsSignedIn) {
       fetchAvailablePDFs();
@@ -166,7 +162,6 @@ export default function ClientHomePage({ isSignedIn: serverIsSignedIn }: ClientH
     return () => window.removeEventListener("pdf-uploaded", handlePdfUploaded);
   }, [user, effectiveIsSignedIn, fetchAvailablePDFs]);
 
-  // Separate useEffect for handling PDF selection and chat history loading
   useEffect(() => {
     if (effectiveIsSignedIn && !isInitialLoad) {
       fetchChatHistory(selectedPDF);
@@ -198,29 +193,29 @@ export default function ClientHomePage({ isSignedIn: serverIsSignedIn }: ClientH
   }, []);
 
   return (
-    <div className="flex flex-1 flex-col md:flex-row overflow-hidden">
-      {/* Mobile Menu Button - Only show on mobile */}
+    <div className="flex flex-1 flex-col md:flex-row overflow-hidden relative">
+      {/* Fixed hamburger menu button - positioned to avoid overlap with status bar */}
       <button
-        className="md:hidden fixed top-4 left-4 z-50 p-2 bg-[#1A1A1A] rounded-md border border-gray-700"
+        className="md:hidden fixed top-4 left-4 z-50 p-1.5 bg-[#1A1A1A] rounded-md border border-gray-700 shadow-sm"
         onClick={handleMobileMenuClick}
         aria-label="Toggle menu"
       >
-        {mobileSidebarOpen ? <X size={20} /> : <Menu size={20} />}
+        {mobileSidebarOpen ? <X size={18} /> : <Menu size={18} />}
       </button>
 
-      {/* Left Side Panel - Mobile Overlay */}
+      {/* Sidebar with consistent width */}
       <div
         className={`${
-          mobileSidebarOpen ? "block" : "hidden"
-        } md:block fixed md:relative inset-0 z-40 md:z-auto w-full md:w-[30%] bg-[#000000f7] md:bg-transparent border-r border-gray-800 flex flex-col overflow-y-auto`}
+          mobileSidebarOpen ? "translate-x-0" : "-translate-x-full"
+        } md:translate-x-0 fixed md:relative inset-0 z-40 md:z-auto w-72 md:w-[30%] lg:w-[25%] bg-[#000000f7] md:bg-transparent border-r border-gray-800 flex flex-col transition-transform duration-300 ease-in-out`}
       >
-        <div className="p-4 h-1/2 flex flex-col overflow-hidden">
-          <h2 className="text-xl mb-4">Upload PDF</h2>
+        <div className="p-3 sm:p-4 h-1/2 flex flex-col overflow-hidden">
+          <h2 className="text-lg sm:text-xl mb-3">Upload PDF</h2>
           <FileUploadComponent />
         </div>
 
-        <div className="border-t border-gray-800 p-4 h-1/2 flex flex-col overflow-hidden">
-          <h2 className="text-xl mb-4">Your PDFs</h2>
+        <div className="border-t border-gray-800 p-3 sm:p-4 h-1/2 flex flex-col overflow-hidden">
+          <h2 className="text-lg sm:text-xl mb-3">Your PDFs</h2>
           <PDFListComponent
             pdfs={availablePDFs}
             selectedPDF={selectedPDF}
@@ -231,7 +226,7 @@ export default function ClientHomePage({ isSignedIn: serverIsSignedIn }: ClientH
       </div>
 
       {/* Chat Section */}
-      <div className="w-full md:w-[70%] overflow-hidden relative">
+      <div className="w-full md:w-[70%] lg:w-[75%] overflow-hidden relative">
         {mobileSidebarOpen && (
           <div
             className="md:hidden fixed inset-0 bg-black bg-opacity-50 z-30"
