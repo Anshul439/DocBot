@@ -18,6 +18,7 @@ import pdfRoutes from "./routes/pdf.route.js";
 import fs from "fs";
 import mongoose from "mongoose";
 import PDFMetadata from "./models/pdf.model.js";
+import cron from "node-cron";
 
 // Initialize Qdrant client
 const qdrantClient = new QdrantClient({
@@ -277,6 +278,36 @@ app.use(express.json());
 // app.get("/", (req: Request, res: Response) => {
 //   res.json({ status: "ok", message: "PDF Chat API is running" });
 // });
+
+app.get("/health", (req: Request, res: Response) => {
+  res.json({
+    status: "ok",
+    message: "Server is alive",
+    timestamp: new Date().toISOString(),
+  });
+});
+
+// Keep-alive function
+const keepAlive = async () => {
+  try {
+    const url = process.env.RENDER_URL;
+    const response = await fetch(`${url}/health`);
+
+    if (response.ok) {
+      console.log(`Keep-alive ping successful at ${new Date().toISOString()}`);
+    } else {
+      console.log(`Keep-alive ping failed with status: ${response.status}`);
+    }
+  } catch (error) {
+    console.error("Keep-alive ping error:", error);
+  }
+};
+
+// Schedule cron job to run every 10 minutes to keep the server alive
+cron.schedule("*/14 * * * *", () => {
+  console.log("Running keep-alive cron job...");
+  keepAlive();
+});
 
 const PORT = process.env.PORT || 8000;
 

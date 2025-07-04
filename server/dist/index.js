@@ -30,6 +30,7 @@ const pdf_route_js_1 = __importDefault(require("./routes/pdf.route.js"));
 const fs_1 = __importDefault(require("fs"));
 const mongoose_1 = __importDefault(require("mongoose"));
 const pdf_model_js_1 = __importDefault(require("./models/pdf.model.js"));
+const node_cron_1 = __importDefault(require("node-cron"));
 // Initialize Qdrant client
 const qdrantClient = new js_client_rest_1.QdrantClient({
     url: process.env.QDRANT_URL,
@@ -242,6 +243,34 @@ app.use(express_1.default.json());
 // app.get("/", (req: Request, res: Response) => {
 //   res.json({ status: "ok", message: "PDF Chat API is running" });
 // });
+app.get("/health", (req, res) => {
+    res.json({
+        status: "ok",
+        message: "Server is alive",
+        timestamp: new Date().toISOString(),
+    });
+});
+// Keep-alive function
+const keepAlive = () => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const url = process.env.RENDER_URL;
+        const response = yield fetch(`${url}/health`);
+        if (response.ok) {
+            console.log(`Keep-alive ping successful at ${new Date().toISOString()}`);
+        }
+        else {
+            console.log(`Keep-alive ping failed with status: ${response.status}`);
+        }
+    }
+    catch (error) {
+        console.error("Keep-alive ping error:", error);
+    }
+});
+// Schedule cron job to run every 10 minutes to keep the server alive
+node_cron_1.default.schedule("*/14 * * * *", () => {
+    console.log("Running keep-alive cron job...");
+    keepAlive();
+});
 const PORT = process.env.PORT || 8000;
 mongoose_1.default
     .connect(process.env.MONGO_URI)
