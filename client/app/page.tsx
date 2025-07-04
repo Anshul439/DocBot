@@ -7,17 +7,15 @@ export default async function Home() {
 
   return (
     <div className="bg-[#000000f7] text-white h-screen flex flex-col">
-      {/* Header with adjusted layout */}
+      {/* Header with adjusted padding */}
       <div className="p-3 sm:p-4 pb-4 border-b border-gray-800 flex justify-between items-center relative">
-        {/* Empty div to balance the layout */}
-        <div className="w-8 md:w-0"></div>
+        {/* Left spacer for mobile - same width as hamburger button */}
+        <div className="w-8 md:w-0 flex-shrink-0 md:hidden"></div>
         
-        {/* Centered title */}
-        <div className="absolute left-1/2 transform -translate-x-1/2">
+        <div className="flex items-center space-x-2 sm:space-x-4 flex-1 md:flex-initial justify-center md:justify-start">
           <h1 className="text-lg sm:text-xl font-bold">DocBot</h1>
         </div>
         
-        {/* Auth buttons */}
         <div className="flex items-center space-x-2 sm:space-x-4">
           {!userId ? (
             <SignInButton mode="modal" forceRedirectUrl={"/sync"}>

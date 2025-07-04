@@ -192,7 +192,7 @@ export default function ClientHomePage({ isSignedIn: serverIsSignedIn }: ClientH
     setMobileSidebarOpen(false);
   }, []);
 
- return (
+  return (
     <div className="flex flex-1 flex-col md:flex-row overflow-hidden relative">
       {/* Fixed hamburger menu button - positioned to avoid overlap with title */}
       <button
@@ -210,12 +210,16 @@ export default function ClientHomePage({ isSignedIn: serverIsSignedIn }: ClientH
         } md:translate-x-0 fixed md:relative inset-0 z-40 md:z-auto w-72 md:w-[30%] lg:w-[25%] bg-[#000000f7] md:bg-transparent border-r border-gray-800 flex flex-col transition-transform duration-300 ease-in-out`}
       >
         <div className="p-3 sm:p-4 h-1/2 flex flex-col overflow-hidden">
-          <h2 className="text-lg sm:text-xl mb-3 text-right">Upload PDF</h2>
+          <div className="flex justify-end md:justify-start items-center mb-3">
+            <h2 className="text-lg sm:text-xl">Upload PDF</h2>
+          </div>
           <FileUploadComponent />
         </div>
 
         <div className="border-t border-gray-800 p-3 sm:p-4 h-1/2 flex flex-col overflow-hidden">
-          <h2 className="text-lg sm:text-xl mb-3">Your PDFs</h2>
+          <div className="flex justify-end md:justify-start items-center mb-3">
+            <h2 className="text-lg sm:text-xl">Your PDFs</h2>
+          </div>
           <PDFListComponent
             pdfs={availablePDFs}
             selectedPDF={selectedPDF}
