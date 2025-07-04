@@ -10,7 +10,7 @@ export default async function Home() {
       {/* Header - Server rendered */}
       <div className="p-4 border-b border-gray-800 flex justify-between items-center">
         <div className="flex items-center space-x-4">
-          <h1 className="text-xl font-bold">DocBot</h1>
+          <h1 className="text-2xl font-bold">DocBot</h1>
         </div>
         <div className="flex items-center space-x-4">
           {!userId ? (

@@ -146,6 +146,7 @@ const qdrantClient = new js_client_rest_1.QdrantClient({
 function isSummaryRequest(query) {
     const summaryKeywords = [
         "summarize",
+        "compare",
         "summary",
         "overview",
         "brief",
@@ -361,30 +362,29 @@ ${pdf.content}
         `)
                     .join("\n\n");
                 const SUMMARY_PROMPT = `
-You are an AI assistant that creates comprehensive summaries of PDF documents.
-Based on the provided content from ${comprehensiveContent.length} PDF document(s), create a detailed summary.
+You are an expert at analyzing and summarizing PDF documents. 
+Your task is to create a comprehensive, well-structured summary based on the following content from ${comprehensiveContent.length} PDF document(s).
 
-${comprehensiveContent.length > 1
-                    ? `For each PDF, provide:
-1. Main topics and themes
-2. Key findings or important information
-3. Any notable conclusions or recommendations
+Guidelines:
+1. Analyze the content thoroughly and identify the most important information
+2. Create a coherent summary that flows naturally
+3. Include key points, findings, and conclusions
+4. Maintain the original meaning and context
+5. Organize the information logically based on the content
+6. Don't mention "the document states" or similar phrases - just present the information directly
+7. For multiple PDFs, identify connections or contrasts between them
 
-Then provide an overall synthesis of all documents together.`
-                    : `Provide:
-1. Main topics and themes covered in the document
-2. Key findings or important information
-3. Any notable conclusions or recommendations`}
-
-CONTENT FROM ${comprehensiveContent.length} PDF(s):
+PDF Content:
 ${summaryContext}
 
-USER REQUEST: ${userQuery}
+User Request: "${userQuery}"
 
-Please provide a comprehensive summary:`;
+Please provide a detailed, well-structured summary:`;
                 const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
                 const geminiResponse = yield model.generateContent(SUMMARY_PROMPT);
-                responseText = geminiResponse.response.text().replace(/_\*/g, ""); // Remove italic markers
+                responseText = geminiResponse.response.text()
+                    .replace(/\*_/g, "*") // Remove italic markers when combined with bold
+                    .replace(/_/g, ""); // Remove all remaining italic markers
                 documents = [];
             }
         }
@@ -454,7 +454,9 @@ USER QUESTION: ${userQuery}
 Please provide a detailed answer based on the information in the documents:`;
                 const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
                 const geminiResponse = yield model.generateContent(QA_PROMPT);
-                responseText = geminiResponse.response.text().replace(/_\*/g, ""); // Remove italic markers
+                responseText = geminiResponse.response.text()
+                    .replace(/\*_/g, "*") // Remove italic markers when combined with bold
+                    .replace(/_/g, ""); // Remove all remaining italic markers
                 documents = allRelevantDocs.map((doc) => ({
                     pageContent: doc.pageContent,
                     metadata: doc.metadata,
