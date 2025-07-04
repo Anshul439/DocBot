@@ -192,11 +192,11 @@ export default function ClientHomePage({ isSignedIn: serverIsSignedIn }: ClientH
     setMobileSidebarOpen(false);
   }, []);
 
-  return (
+ return (
     <div className="flex flex-1 flex-col md:flex-row overflow-hidden relative">
-      {/* Fixed hamburger menu button - positioned to avoid overlap with status bar */}
+      {/* Fixed hamburger menu button - positioned to avoid overlap with title */}
       <button
-        className="md:hidden fixed top-4 left-4 z-50 p-1.5 bg-[#1A1A1A] rounded-md border border-gray-700 shadow-sm"
+        className="md:hidden fixed top-[18px] left-4 z-50 p-1.5 bg-[#1A1A1A] rounded-md border border-gray-700 shadow-sm"
         onClick={handleMobileMenuClick}
         aria-label="Toggle menu"
       >
@@ -210,7 +210,7 @@ export default function ClientHomePage({ isSignedIn: serverIsSignedIn }: ClientH
         } md:translate-x-0 fixed md:relative inset-0 z-40 md:z-auto w-72 md:w-[30%] lg:w-[25%] bg-[#000000f7] md:bg-transparent border-r border-gray-800 flex flex-col transition-transform duration-300 ease-in-out`}
       >
         <div className="p-3 sm:p-4 h-1/2 flex flex-col overflow-hidden">
-          <h2 className="text-lg sm:text-xl mb-3">Upload PDF</h2>
+          <h2 className="text-lg sm:text-xl mb-3 text-right">Upload PDF</h2>
           <FileUploadComponent />
         </div>
 

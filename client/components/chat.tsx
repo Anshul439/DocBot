@@ -15,7 +15,6 @@ interface ChatComponentProps {
   ) => void;
   availablePDFs: IPDF[];
   hasPDFs: boolean;
-  // Add loading states as props
   loadingStates: Record<string, boolean>;
   setLoadingStates: (states: Record<string, boolean>) => void;
 }
@@ -36,7 +35,6 @@ const ChatComponent: React.FC<ChatComponentProps> = ({
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const { isSignedIn, getToken } = useAuth();
 
-  // Get the current chat's loading state
   const currentChatKey = selectedPDF || "all";
   const loading = loadingStates[currentChatKey] || false;
 
@@ -52,15 +50,12 @@ const ChatComponent: React.FC<ChatComponentProps> = ({
 
   const scrollToBottom = (): void => {
     if (messagesContainerRef.current) {
-      // Instantly set scroll position to bottom without any animation
       messagesContainerRef.current.scrollTop =
         messagesContainerRef.current.scrollHeight;
     }
   };
 
-  // Handle initial load and PDF changes
   useEffect(() => {
-    // For initial load or PDF change, scroll immediately
     const timer = setTimeout(() => {
       scrollToBottom();
       setIsInitialLoad(false);
@@ -69,19 +64,15 @@ const ChatComponent: React.FC<ChatComponentProps> = ({
     return () => clearTimeout(timer);
   }, [selectedPDF]);
 
-  // Handle new messages - always scroll to bottom instantly
   useEffect(() => {
     if (chatHistory.length > 0) {
-      // Use requestAnimationFrame to ensure DOM is updated
       requestAnimationFrame(() => {
         scrollToBottom();
       });
     }
   }, [chatHistory]);
 
-  // Ensure component is ready for display
   useEffect(() => {
-    // Mark as ready after initial render
     const timer = setTimeout(() => {
       setIsInitialLoad(false);
     }, 100);
@@ -89,7 +80,6 @@ const ChatComponent: React.FC<ChatComponentProps> = ({
     return () => clearTimeout(timer);
   }, []);
 
-  // Add this useEffect to clear chat state when signing out
   useEffect(() => {
     if (!isSignedIn) {
       setMessage("");
@@ -208,7 +198,7 @@ const ChatComponent: React.FC<ChatComponentProps> = ({
 
   return (
     <div className="flex flex-col h-full">
-      {/* Status bar showing which PDF is selected */}
+      {/* Status bar showing which PDF is selected - moved to top */}
       {isSignedIn && hasPDFs && (
         <div className="border-b border-gray-800 p-2 md:p-3 text-xs md:text-sm text-gray-400">
           {selectedPDF ? (
@@ -231,14 +221,9 @@ const ChatComponent: React.FC<ChatComponentProps> = ({
       {/* Messages area */}
       <div
         ref={messagesContainerRef}
-        className="flex-1 overflow-y-auto p-2 md:p-4 space-y-3 md:space-y-4 [&::-webkit-scrollbar]:w-2 Add commentMore actions
-    [&::-webkit-scrollbar-thumb]:rounded-full 
-    [&::-webkit-scrollbar-thumb]:bg-gray-700 
-    [&::-webkit-scrollbar-track]:bg-gray-900"
+        className="flex-1 overflow-y-auto p-2 md:p-4 space-y-3 md:space-y-4 pb-16 md:pb-0 [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-gray-700 [&::-webkit-scrollbar-track]:bg-gray-900"
         style={{
-          // Prevent content shift during initial load
           minHeight: 0,
-          // Disable smooth scrolling entirely
           scrollBehavior: "auto",
         }}
       >
@@ -307,8 +292,8 @@ const ChatComponent: React.FC<ChatComponentProps> = ({
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Input area */}
-      <div className="p-2 md:p-4">
+      {/* Input area - fixed at bottom on mobile */}
+      <div className="fixed bottom-0 left-0 right-0 md:static bg-[#000000f7] p-2 md:p-4 border-t border-gray-800 md:border-t-0">
         <div className="flex items-center bg-[#0F0F0F] rounded-lg overflow-hidden border border-gray-800">
           <input
             type="text"
