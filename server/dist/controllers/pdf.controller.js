@@ -337,7 +337,7 @@ const chatWithPdf = (req, res) => __awaiter(void 0, void 0, void 0, function* ()
         const apiKey = process.env.GOOGLE_API_KEY;
         const embeddings = new google_genai_1.GoogleGenerativeAIEmbeddings({
             apiKey,
-            modelName: "models/embedding-001",
+            modelName: "gemini-embedding-001",
         });
         const isSummary = isSummaryRequest(userQuery);
         let responseText = "";

@@ -407,7 +407,7 @@ export const chatWithPdf = async (
     const apiKey = process.env.GOOGLE_API_KEY as string;
     const embeddings = new GoogleGenerativeAIEmbeddings({
       apiKey,
-      modelName: "models/embedding-001",
+      modelName: "gemini-embedding-001",
     });
 
     const isSummary = isSummaryRequest(userQuery);

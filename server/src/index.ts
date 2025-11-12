@@ -31,7 +31,7 @@ export const queue = new Queue("file-upload-queue", {
     username: "default",
     password: process.env.REDIS_PASSWORD,
     host: process.env.REDIS_URL,
-    port: 10979,
+    port: 14056,
   },
 });
 
@@ -173,7 +173,7 @@ const worker = new Worker(
       // Initialize Gemini embeddings
       const embeddings = new GoogleGenerativeAIEmbeddings({
         apiKey: process.env.GOOGLE_API_KEY,
-        modelName: "models/embedding-001",
+        modelName: "gemini-embedding-001",
       });
 
       // Check if collection exists, if not create it
@@ -186,7 +186,7 @@ const worker = new Worker(
         // Create a new collection for this PDF
         await qdrantClient.createCollection(collectionName, {
           vectors: {
-            size: 768,
+            size: 3072,
             distance: "Cosine",
           },
         });
@@ -249,7 +249,7 @@ const worker = new Worker(
       username: "default",
       password: process.env.REDIS_PASSWORD,
       host: process.env.REDIS_URL,
-      port: 10979,
+      port: 14056,
     },
   }
 );
