@@ -254,13 +254,13 @@ export const uploadPdf = async (req: Request, res: Response): Promise<void> => {
     // Add to queue for processing with user ID
     const job = await queue.add(
       "file",
-      JSON.stringify({
+      {
         userId: user._id,
         clerkId: clerkUserId,
         filename: req.file.originalname,
         destination: req.file.destination,
         path: filePath, // Use the verified path
-      }),
+      },
       {
         // SOLUTION 2: Add job options for retry and delay
         attempts: 3,

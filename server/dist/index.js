@@ -83,7 +83,7 @@ exports.queue = new bullmq_1.Queue("file-upload-queue", {
 const worker = new bullmq_1.Worker("file-upload-queue", (job) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         console.log("Processing job:", job.data);
-        const data = JSON.parse(job.data);
+        const data = job.data;
         const userId = new mongoose_1.default.Types.ObjectId(data.userId);
         let fileExists = false;
         let attempts = 0;
@@ -147,8 +147,8 @@ const worker = new bullmq_1.Worker("file-upload-queue", (job) => __awaiter(void 
         }
         // Create text splitter for better processing
         const textSplitter = new textsplitters_1.CharacterTextSplitter({
-            chunkSize: 1000,
-            chunkOverlap: 200,
+            chunkSize: 500,
+            chunkOverlap: 100,
         });
         // Split the documents into chunks
         const splitDocs = yield textSplitter.splitDocuments(docs);
@@ -181,7 +181,15 @@ const worker = new bullmq_1.Worker("file-upload-queue", (job) => __awaiter(void 
             collectionName: collectionName,
         });
         // Add documents to vector store
-        yield vectorStore.addDocuments(splitDocs);
+        const BATCH_SIZE = 40;
+        const batches = [];
+        for (let i = 0; i < splitDocs.length; i += BATCH_SIZE) {
+            batches.push(splitDocs.slice(i, i + BATCH_SIZE));
+        }
+        for (let i = 0; i < batches.length; i++) {
+            yield vectorStore.addDocuments(batches[i]);
+            console.log(`Added batch ${i + 1}/${batches.length}`);
+        }
         console.log(`Successfully added ${splitDocs.length} chunks to collection: ${collectionName}`);
         // Save metadata to MongoDB
         const pdfMetadata = new pdf_model_js_1.default({
@@ -201,7 +209,7 @@ const worker = new bullmq_1.Worker("file-upload-queue", (job) => __awaiter(void 
         // Clean up on error
         if (job.data) {
             try {
-                const data = JSON.parse(job.data);
+                const data = job.data;
                 if (data.path && fs_1.default.existsSync(data.path)) {
                     fs_1.default.unlinkSync(data.path);
                     console.log(`Cleaned up file after processing error: ${data.path}`);
@@ -226,13 +234,8 @@ const worker = new bullmq_1.Worker("file-upload-queue", (job) => __awaiter(void 
 worker.on("error", (err) => {
     console.error("Worker error:", err);
 });
-worker.on("failed", (job, err) => {
-    if (job) {
-        console.error(`Job ${job.id} failed:`, err);
-    }
-    else {
-        console.error("Job failed:", err);
-    }
+worker.on("failed", (job, err, prev) => {
+    console.error(`Worker failed processing job ${job === null || job === void 0 ? void 0 : job.id} with error: ${err.message}`);
 });
 worker.on("completed", (job, result) => {
     console.log(`Job ${job.id} completed:`, result);

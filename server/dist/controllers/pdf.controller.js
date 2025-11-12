@@ -201,13 +201,13 @@ const uploadPdf = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
         // Find or create the user in your MongoDB
         const user = yield user_model_1.default.findOneAndUpdate({ clerkId: clerkUserId }, {}, { upsert: true, new: true });
         // Add to queue for processing with user ID
-        const job = yield index_1.queue.add("file", JSON.stringify({
+        const job = yield index_1.queue.add("file", {
             userId: user._id,
             clerkId: clerkUserId,
             filename: req.file.originalname,
             destination: req.file.destination,
             path: filePath, // Use the verified path
-        }), {
+        }, {
             // SOLUTION 2: Add job options for retry and delay
             attempts: 3,
             backoff: {

@@ -80,7 +80,7 @@ const worker = new Worker(
   async (job) => {
     try {
       console.log("Processing job:", job.data);
-      const data = JSON.parse(job.data);
+      const data = job.data;
       const userId = new mongoose.Types.ObjectId(data.userId);
       let fileExists = false;
       let attempts = 0;
@@ -158,8 +158,8 @@ const worker = new Worker(
 
       // Create text splitter for better processing
       const textSplitter = new CharacterTextSplitter({
-        chunkSize: 1000,
-        chunkOverlap: 200,
+        chunkSize: 500,
+        chunkOverlap: 100,
       });
 
       // Split the documents into chunks
@@ -204,7 +204,16 @@ const worker = new Worker(
       );
 
       // Add documents to vector store
-      await vectorStore.addDocuments(splitDocs);
+      const BATCH_SIZE = 40;
+      const batches = [];
+      for (let i = 0; i < splitDocs.length; i += BATCH_SIZE) {
+        batches.push(splitDocs.slice(i, i + BATCH_SIZE));
+      }
+
+      for (let i = 0; i < batches.length; i++) {
+        await vectorStore.addDocuments(batches[i]);
+        console.log(`Added batch ${i + 1}/${batches.length}`);
+      }
       console.log(
         `Successfully added ${splitDocs.length} chunks to collection: ${collectionName}`
       );
@@ -230,7 +239,7 @@ const worker = new Worker(
       // Clean up on error
       if (job.data) {
         try {
-          const data = JSON.parse(job.data);
+          const data = job.data;
           if (data.path && fs.existsSync(data.path)) {
             fs.unlinkSync(data.path);
             console.log(`Cleaned up file after processing error: ${data.path}`);
@@ -259,12 +268,10 @@ worker.on("error", (err) => {
   console.error("Worker error:", err);
 });
 
-worker.on("failed", (job, err) => {
-  if (job) {
-    console.error(`Job ${job.id} failed:`, err);
-  } else {
-    console.error("Job failed:", err);
-  }
+worker.on("failed", (job, err, prev) => {
+  console.error(
+    `Worker failed processing job ${job?.id} with error: ${err.message}`
+  );
 });
 
 worker.on("completed", (job, result) => {
