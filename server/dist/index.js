@@ -40,8 +40,11 @@ exports.queue = new bullmq_1.Queue("file-upload-queue", {
     connection: {
         username: "default",
         password: process.env.REDIS_PASSWORD,
-        host: process.env.REDIS_URL,
-        port: 14056,
+        host: process.env.REDIS_HOST,
+        port: 28452,
+        tls: {
+            rejectUnauthorized: false,
+        },
     },
 });
 // const cleanupOldCollections = async () => {
@@ -226,8 +229,11 @@ const worker = new bullmq_1.Worker("file-upload-queue", (job) => __awaiter(void 
     connection: {
         username: "default",
         password: process.env.REDIS_PASSWORD,
-        host: process.env.REDIS_URL,
-        port: 14056,
+        host: process.env.REDIS_HOST,
+        port: 28452,
+        tls: {
+            rejectUnauthorized: false,
+        },
     },
 });
 // Worker event handlers

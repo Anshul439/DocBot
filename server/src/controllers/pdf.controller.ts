@@ -461,7 +461,7 @@ User Request: "${userQuery}"
 
 Please provide a detailed, well-structured summary:`;
 
-        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+        const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
         const geminiResponse = await model.generateContent(SUMMARY_PROMPT);
         responseText = geminiResponse.response
           .text()
@@ -551,7 +551,7 @@ USER QUESTION: ${userQuery}
 
 Please provide a detailed answer based on the information in the documents:`;
 
-        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+        const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
         const geminiResponse = await model.generateContent(QA_PROMPT);
         responseText = geminiResponse.response
           .text()

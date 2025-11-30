@@ -30,8 +30,11 @@ export const queue = new Queue("file-upload-queue", {
   connection: {
     username: "default",
     password: process.env.REDIS_PASSWORD,
-    host: process.env.REDIS_URL,
-    port: 14056,
+    host: process.env.REDIS_HOST,
+    port: 28452,
+    tls: {
+      rejectUnauthorized: false,
+    },
   },
 });
 
@@ -257,8 +260,11 @@ const worker = new Worker(
     connection: {
       username: "default",
       password: process.env.REDIS_PASSWORD,
-      host: process.env.REDIS_URL,
-      port: 14056,
+      host: process.env.REDIS_HOST,
+      port: 28452,
+      tls: {
+        rejectUnauthorized: false,
+      },
     },
   }
 );
