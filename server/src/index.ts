@@ -27,7 +27,10 @@ const qdrantClient = new QdrantClient({
   checkCompatibility: false,
 });
 
-export const queue = new Queue("file-upload-queue", {
+// Use separate queue names for local dev vs production to prevent job stealing
+const QUEUE_NAME = process.env.NODE_ENV === "production" ? "file-upload-queue" : "file-upload-queue-dev";
+
+export const queue = new Queue(QUEUE_NAME, {
   connection: {
     username: "default",
     password: process.env.REDIS_PASSWORD,
@@ -80,7 +83,7 @@ export const queue = new Queue("file-upload-queue", {
 
 // Initialize the worker within the same process
 const worker = new Worker(
-  "file-upload-queue",
+  QUEUE_NAME,
   async (job) => {
     try {
       console.log("Processing job:", job.data);

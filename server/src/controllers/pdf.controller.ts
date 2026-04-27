@@ -216,7 +216,7 @@ export const uploadPdf = async (req: Request, res: Response): Promise<void> => {
   const userId = (req as any).userId;
 
   try {
-    const filePath = req.file.path;
+    const filePath = path.resolve(req.file.path);
 
     await new Promise((resolve) => setTimeout(resolve, 100));
 

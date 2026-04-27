@@ -253,24 +253,43 @@ const ChatComponent: React.FC<ChatComponentProps> = ({
               ) : (
                 msg.content
               )}
-              {msg.documents && msg.documents.length > 0 && (
-                <div className="mt-2 text-xs opacity-70">
-                  <p className="font-semibold">Sources:</p>
-                  <ul className="list-disc pl-4 space-y-1">
-                    {msg.documents.map((doc: IDocument, i: number) => (
-                      <li key={i}>
-                        {doc.metadata?.source || "Document"} (Page{" "}
-                        {doc.metadata?.loc?.pageNumber || "N/A"})
-                        {doc.metadata?.score && (
-                          <span className="ml-1">
-                            [Score: {doc.metadata.score.toFixed(2)}]
-                          </span>
-                        )}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
+              {msg.documents && msg.documents.length > 0 && (() => {
+                // Deduplicate sources by filename + page number
+                const seen = new Set<string>();
+                const uniqueSources = msg.documents
+                  .map((doc: IDocument) => {
+                    const filename = doc.metadata?.originalFilename
+                      || (doc.metadata?.source
+                        ? doc.metadata.source.split("/").pop()?.replace(/^\d+-\d+-/, "") ?? "Document"
+                        : "Document");
+                    const page = doc.metadata?.loc?.pageNumber ?? null;
+                    return { filename, page };
+                  })
+                  .filter(({ filename, page }: { filename: string; page: number | null }) => {
+                    const key = `${filename}-${page}`;
+                    if (seen.has(key)) return false;
+                    seen.add(key);
+                    return true;
+                  });
+
+                return (
+                  <div className="mt-3 pt-2 border-t border-gray-700">
+                    <p className="text-xs font-semibold text-gray-400 mb-1">Sources</p>
+                    <div className="flex flex-wrap gap-1">
+                      {uniqueSources.map(({ filename, page }: { filename: string; page: number | null }, i: number) => (
+                        <span
+                          key={i}
+                          className="inline-flex items-center gap-1 bg-gray-800 text-gray-300 text-xs px-2 py-0.5 rounded-full"
+                        >
+                          <span className="text-indigo-400">📄</span>
+                          {filename}
+                          {page && <span className="text-gray-500 ml-1">p.{page}</span>}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
           </div>
         ))}
