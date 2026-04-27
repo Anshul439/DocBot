@@ -3,6 +3,8 @@ export interface IDocumentMetadata {
   source?: string;
   loc?: { pageNumber?: number };
   score?: number;
+  originalFilename?: string;
+  collectionName?: string;
 }
 
 export interface IDocument {
