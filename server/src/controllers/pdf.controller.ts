@@ -311,6 +311,7 @@ export const chatWithPdf = async (
     const userQuery = req.query.message as string;
     const collectionName = req.query.collection as string;
     const userId = (req as any).userId;
+    const isGuest = (req as any).isGuest === true;
 
     if (!userQuery) {
       res.status(400).json({
@@ -320,25 +321,27 @@ export const chatWithPdf = async (
       return;
     }
 
-    const user = await User.findById(userId);
-    if (!user) {
-      res.status(404).json({
-        success: false,
-        error: "User not found",
-      });
-      return;
+    // For authenticated users, validate they exist in DB
+    // For guests, we use the guestId directly as the userId string
+    let effectiveUserId: any = userId;
+    if (!isGuest) {
+      const user = await User.findById(userId);
+      if (!user) {
+        res.status(404).json({ success: false, error: "User not found" });
+        return;
+      }
+      effectiveUserId = user._id;
     }
 
     console.log(
-      `Processing query: "${userQuery}" for collection: ${collectionName || "all"
-      }`
+      `Processing query: "${userQuery}" for collection: ${collectionName || "all"} [${isGuest ? "guest" : "user"}]`
     );
 
     let collectionsToSearch: string[] = [];
     if (collectionName) {
       const pdf = await PDFMetadata.findOne({
         collectionName,
-        userId: user._id, // Ensure PDF belongs to user
+        userId: effectiveUserId,
       });
       if (!pdf) {
         res.json({
@@ -350,8 +353,7 @@ export const chatWithPdf = async (
       }
       collectionsToSearch = [collectionName];
     } else {
-      // Get all PDFs for this specific user
-      const userPDFs = await PDFMetadata.find({ userId: user._id });
+      const userPDFs = await PDFMetadata.find({ userId: effectiveUserId });
       collectionsToSearch = userPDFs.map((pdf) => pdf.collectionName);
 
       if (collectionsToSearch.length === 0) {
@@ -368,8 +370,8 @@ export const chatWithPdf = async (
     if (collectionsToSearch.length > 0) {
       try {
         await ChatMessage.create({
-          userId: user._id, // Use MongoDB user ID
-          collectionName: collectionName || null, // This will be null for "all PDFs" and the specific collection name for individual PDFs
+          userId: effectiveUserId,
+          collectionName: collectionName || null,
           role: "user",
           content: userQuery,
           timestamp: new Date(),
@@ -397,7 +399,7 @@ export const chatWithPdf = async (
       const comprehensiveContent = await getComprehensiveContent(
         collectionsToSearch,
         embeddings,
-        user._id as mongoose.Types.ObjectId
+        effectiveUserId
       );
 
       if (comprehensiveContent.length === 0) {
@@ -464,7 +466,7 @@ Please provide a detailed, well-structured summary:`;
             let originalFilename = collection;
             const pdfMetadata = await PDFMetadata.findOne({
               collectionName: collection,
-              userId: user._id,
+              userId: effectiveUserId,
             });
             if (pdfMetadata) {
               originalFilename = pdfMetadata.originalFilename;
@@ -536,7 +538,7 @@ Please provide a detailed answer based on the information in the documents:`;
     // Save assistant response to history
     try {
       await ChatMessage.create({
-        userId: user._id, // Use MongoDB user ID
+        userId: effectiveUserId,
         collectionName: collectionName || null,
         role: "assistant",
         content: responseText,
@@ -602,56 +604,43 @@ export const deletePdf = async (req: Request, res: Response): Promise<void> => {
   try {
     const { collectionName } = req.params;
     const userId = (req as any).userId;
+    const isGuest = (req as any).isGuest === true;
 
-    console.log(
-      `Delete request for collection: ${collectionName}, user: ${userId}`
-    );
+    console.log(`Delete request for collection: ${collectionName}, user: ${userId}`);
 
-    const user = await User.findById(userId);
-    if (!user) {
-      console.log("User not found");
-      res.status(404).json({
-        success: false,
-        error: "User not found",
-      });
-      return;
+    let effectiveUserId: any = userId;
+    if (!isGuest) {
+      const user = await User.findById(userId);
+      if (!user) {
+        res.status(404).json({ success: false, error: "User not found" });
+        return;
+      }
+      effectiveUserId = user._id;
     }
 
-    // 2. Find and validate PDF ownership
+    // Find and validate PDF ownership
     const pdfToDelete = await PDFMetadata.findOne({
       collectionName,
-      userId: user._id,
+      userId: effectiveUserId,
     });
 
     if (!pdfToDelete) {
-      console.log(`PDF not found or not owned by user: ${collectionName}`);
-      res.status(404).json({
-        success: false,
-        error: "PDF not found or not owned by user",
-      });
+      res.status(404).json({ success: false, error: "PDF not found or not owned by user" });
       return;
     }
 
     console.log(`Found PDF to delete: ${pdfToDelete.originalFilename}`);
 
-    // 3. Check remaining PDFs count BEFORE deletion
-    const totalPDFsBeforeDeletion = await PDFMetadata.countDocuments({
-      userId: user._id,
-    });
+    const totalPDFsBeforeDeletion = await PDFMetadata.countDocuments({ userId: effectiveUserId });
     const isLastPDF = totalPDFsBeforeDeletion === 1;
 
-    // 4. Delete from database first (this is the critical operation)
     const deletedPDF = await PDFMetadata.findOneAndDelete({
       collectionName,
-      userId: user._id,
+      userId: effectiveUserId,
     });
 
     if (!deletedPDF) {
-      console.log("Failed to delete from database");
-      res.status(500).json({
-        success: false,
-        error: "Failed to delete PDF from database",
-      });
+      res.status(500).json({ success: false, error: "Failed to delete PDF from database" });
       return;
     }
 
@@ -659,34 +648,17 @@ export const deletePdf = async (req: Request, res: Response): Promise<void> => {
       `Successfully deleted from database: ${deletedPDF.originalFilename}`
     );
 
-    // 5. If this was the last PDF, delete "All PDFs" chat messages
     if (isLastPDF) {
       try {
-        const deletedChatMessages = await ChatMessage.deleteMany({
-          userId: user._id,
-          collectionName: null, // These are "All PDFs" messages
-        });
-        console.log(
-          `Deleted ${deletedChatMessages.deletedCount} "All PDFs" chat messages`
-        );
+        await ChatMessage.deleteMany({ userId: effectiveUserId, collectionName: null });
       } catch (chatError) {
         console.error("Error deleting All PDFs chat messages:", chatError);
-        // Don't fail the whole operation for this
       }
     }
-
-    // 6. Delete specific PDF chat messages
     try {
-      const deletedSpecificChats = await ChatMessage.deleteMany({
-        userId: user._id,
-        collectionName: collectionName,
-      });
-      console.log(
-        `Deleted ${deletedSpecificChats.deletedCount} specific PDF chat messages`
-      );
+      await ChatMessage.deleteMany({ userId: effectiveUserId, collectionName });
     } catch (chatError) {
       console.error("Error deleting specific PDF chat messages:", chatError);
-      // Don't fail the whole operation for this
     }
 
     // 7. Respond to client immediately with success

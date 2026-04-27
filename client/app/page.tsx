@@ -4,6 +4,7 @@ import { useState } from "react";
 import { LogOut, User } from "lucide-react";
 import ClientHomePage from "@/components/client-home";
 import AuthModal from "@/components/auth-modal";
+import GuestBanner from "@/components/guest-banner";
 import { useAuth } from "@/lib/auth-context";
 
 export default function Home() {
@@ -31,7 +32,9 @@ export default function Home() {
         <div className="w-8 md:w-0 flex-shrink-0 md:hidden" />
 
         <div className="flex items-center space-x-2 sm:space-x-4 flex-1 md:flex-initial justify-center md:justify-start">
-          <h1 className="text-lg sm:text-xl font-bold">DocBot</h1>
+          <a href="/" className="hover:opacity-80 transition-opacity">
+            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">DocBot</h1>
+          </a>
         </div>
 
         <div className="flex items-center space-x-2 sm:space-x-4">
@@ -67,6 +70,7 @@ export default function Home() {
         </div>
       </div>
 
+      <GuestBanner />
       <ClientHomePage isSignedIn={isSignedIn} />
 
       {showAuth && (

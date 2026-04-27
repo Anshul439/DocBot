@@ -18,7 +18,7 @@ interface ClientHomePageProps {
 }
 
 export default function ClientHomePage({ isSignedIn: serverIsSignedIn }: ClientHomePageProps) {
-  const { isSignedIn, getToken, user } = useAuth();
+  const { isSignedIn, getAuthHeaders, user } = useAuth();
   const [availablePDFs, setAvailablePDFs] = useState<IPDF[]>([]);
   const [selectedPDF, setSelectedPDF] = useState<string | null>(null);
   const [chatHistories, setChatHistories] = useState<
@@ -43,16 +43,10 @@ export default function ClientHomePage({ isSignedIn: serverIsSignedIn }: ClientH
   }, []);
 
   const fetchAvailablePDFs = useCallback(async (): Promise<void> => {
-    if (!effectiveIsSignedIn) {
-      clearAllState();
-      return;
-    }
-
     try {
-      const token = getToken();
       const response = await fetch(`${process.env.NEXT_PUBLIC_ROOT_URL}/pdfs`, {
         headers: {
-          Authorization: `Bearer ${token}`,
+          ...getAuthHeaders(),
         },
       });
 
@@ -103,7 +97,7 @@ export default function ClientHomePage({ isSignedIn: serverIsSignedIn }: ClientH
     } finally {
       setIsInitialLoad(false);
     }
-  }, [effectiveIsSignedIn, getToken, clearAllState]);
+  }, [getAuthHeaders, clearAllState]);
 
   useEffect(() => {
     if (!effectiveIsSignedIn) {
@@ -113,30 +107,15 @@ export default function ClientHomePage({ isSignedIn: serverIsSignedIn }: ClientH
 
   const fetchChatHistory = useCallback(
     async (collectionName: string | null): Promise<void> => {
-      if (!effectiveIsSignedIn) return;
-
       try {
-        const token = getToken();
-        if (!token) {
-          throw new Error("No authentication token available");
-        }
-
         const response = await fetch(
-          `${process.env.NEXT_PUBLIC_ROOT_URL}/chat/history?collectionName=${collectionName || ""
-          }`,
-          {
-            headers: {
-              Authorization: `Bearer ${token}`,
-            },
-          }
+          `${process.env.NEXT_PUBLIC_ROOT_URL}/chat/history?collectionName=${collectionName || ""}`,
+          { headers: { ...getAuthHeaders() } }
         );
 
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
-        }
+        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
 
         const data: FetchChatHistoryResponse = await response.json();
-
         if (data.success && data.messages) {
           updateChatHistory(collectionName, data.messages);
         }
@@ -144,13 +123,12 @@ export default function ClientHomePage({ isSignedIn: serverIsSignedIn }: ClientH
         console.error("Error fetching chat history:", error);
       }
     },
-    [effectiveIsSignedIn, getToken]
+    [getAuthHeaders]
   );
 
   useEffect(() => {
-    if (user && effectiveIsSignedIn) {
-      fetchAvailablePDFs();
-    }
+    // Always fetch PDFs on mount (works for both guests and signed-in users)
+    fetchAvailablePDFs();
 
     const handlePdfUploaded = () => {
       fetchAvailablePDFs();
@@ -161,10 +139,10 @@ export default function ClientHomePage({ isSignedIn: serverIsSignedIn }: ClientH
   }, [user, effectiveIsSignedIn, fetchAvailablePDFs]);
 
   useEffect(() => {
-    if (effectiveIsSignedIn && !isInitialLoad) {
+    if (!isInitialLoad) {
       fetchChatHistory(selectedPDF);
     }
-  }, [selectedPDF, effectiveIsSignedIn, isInitialLoad, fetchChatHistory]);
+  }, [selectedPDF, isInitialLoad, fetchChatHistory]);
 
   const handleSelectPDF = useCallback((collectionName: string | null): void => {
     setSelectedPDF(collectionName);

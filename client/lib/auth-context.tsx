@@ -20,10 +20,12 @@ interface AuthContextType {
     token: string | null;
     isSignedIn: boolean;
     isLoaded: boolean;
+    guestId: string | null;
     signIn: (email: string, password: string) => Promise<void>;
     signUp: (email: string, password: string, name: string) => Promise<void>;
     signOut: () => void;
     getToken: () => string | null;
+    getAuthHeaders: () => Record<string, string>;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -31,6 +33,7 @@ const AuthContext = createContext<AuthContextType | null>(null);
 export function AuthProvider({ children }: { children: ReactNode }) {
     const [user, setUser] = useState<User | null>(null);
     const [token, setToken] = useState<string | null>(null);
+    const [guestId, setGuestId] = useState<string | null>(null);
     const [isLoaded, setIsLoaded] = useState(false);
 
     useEffect(() => {
@@ -45,6 +48,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 localStorage.removeItem("auth_user");
             }
         }
+
+        // Generate or restore guest ID
+        let gid = localStorage.getItem("guest_id");
+        if (!gid) {
+            gid = `guest_${crypto.randomUUID()}`;
+            localStorage.setItem("guest_id", gid);
+        }
+        setGuestId(gid);
         setIsLoaded(true);
     }, []);
 
@@ -100,17 +111,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return localStorage.getItem("auth_token");
     }, []);
 
+    // Returns the right auth headers: JWT for signed-in users, guest ID for guests
+    const getAuthHeaders = useCallback((): Record<string, string> => {
+        const t = localStorage.getItem("auth_token");
+        if (t) return { Authorization: `Bearer ${t}` };
+        const gid = localStorage.getItem("guest_id");
+        if (gid) return { "X-Guest-Id": gid };
+        return {};
+    }, []);
+
     return (
         <AuthContext.Provider
             value={{
                 user,
                 token,
+                guestId,
                 isSignedIn: !!user && !!token,
                 isLoaded,
                 signIn,
                 signUp,
                 signOut,
                 getToken,
+                getAuthHeaders,
             }}
         >
             {children}

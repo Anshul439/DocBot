@@ -35,7 +35,7 @@ const ChatComponent: React.FC<ChatComponentProps> = ({
   const [isInitialLoad, setIsInitialLoad] = useState<boolean>(true);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
-  const { isSignedIn, getToken } = useAuth();
+  const { isSignedIn, getAuthHeaders } = useAuth();
 
   const currentChatKey = selectedPDF || "all";
   const loading = loadingStates[currentChatKey] || false;
@@ -99,11 +99,6 @@ const ChatComponent: React.FC<ChatComponentProps> = ({
   const handleSendMessage = async (): Promise<void> => {
     if (!message.trim() || loading) return;
 
-    if (!isSignedIn) {
-      setShowAuthPrompt(true);
-      return;
-    }
-
     const userMessage: IMessage = {
       role: "user",
       content: message,
@@ -116,20 +111,12 @@ const ChatComponent: React.FC<ChatComponentProps> = ({
     setCurrentChatLoading(true);
 
     try {
-      const token = getToken();
-      if (!token) throw new Error("No authentication token available");
-
-      let url = `${process.env.NEXT_PUBLIC_ROOT_URL
-        }/chat?message=${encodeURIComponent(message)}`;
-      if (selectedPDF) {
-        url += `&collection=${encodeURIComponent(selectedPDF)}`;
-      }
-
+      const url = `${process.env.NEXT_PUBLIC_ROOT_URL}/chat?message=${encodeURIComponent(message)}${selectedPDF ? `&collection=${encodeURIComponent(selectedPDF)}` : ""}`;
       const response = await fetch(url, {
         method: "GET",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
+          ...getAuthHeaders(),
         },
       });
 
@@ -175,9 +162,7 @@ const ChatComponent: React.FC<ChatComponentProps> = ({
   };
 
   const handleInputFocus = (): void => {
-    if (!isSignedIn) {
-      setShowAuthPrompt(true);
-    }
+    // no-op: guests are allowed to use chat
   };
 
   const handleMessageChange = (
@@ -283,7 +268,7 @@ const ChatComponent: React.FC<ChatComponentProps> = ({
                         >
                           <span className="text-indigo-400">📄</span>
                           {filename}
-                          {page && <span className="text-gray-500 ml-1">p.{page}</span>}
+                          {page && <span className="text-gray-500 ml-1">Page {page}</span>}
                         </span>
                       ))}
                     </div>
@@ -344,9 +329,6 @@ const ChatComponent: React.FC<ChatComponentProps> = ({
         </div>
       </div>
 
-      {showAuthPrompt && (
-        <SignInPrompt onClose={() => setShowAuthPrompt(false)} />
-      )}
     </div>
   );
 };

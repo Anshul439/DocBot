@@ -22,7 +22,7 @@ const FileUploadComponent: React.FC<FileUploadComponentProps> = () => {
   const [showAuthPrompt, setShowAuthPrompt] = useState<boolean>(false);
   const [jobId, setJobId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const { isSignedIn, getToken } = useAuth();
+  const { isSignedIn, getAuthHeaders } = useAuth();
 
   useEffect(() => {
     if (jobId && uploadStatus === UploadStatus.PROCESSING) {
@@ -31,7 +31,7 @@ const FileUploadComponent: React.FC<FileUploadComponentProps> = () => {
     }
   }, [jobId, uploadStatus]);
 
-  // Add this useEffect to clear upload state when signing out
+  // Clear upload state when signing out
   useEffect(() => {
     if (!isSignedIn) {
       setFileSize("");
@@ -89,14 +89,13 @@ const FileUploadComponent: React.FC<FileUploadComponentProps> = () => {
     setStatusMessage("Uploading file...");
 
     try {
-      const token = getToken();
       const formData = new FormData();
       formData.append("pdf", selectedFile);
 
       const response = await fetch(`${process.env.NEXT_PUBLIC_ROOT_URL}/upload/pdf`, {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${token}`,
+          ...getAuthHeaders(),
         },
         body: formData
       });
@@ -135,11 +134,6 @@ const FileUploadComponent: React.FC<FileUploadComponentProps> = () => {
     e.preventDefault();
     setIsHovered(false);
 
-    if (!isSignedIn) {
-      setShowAuthPrompt(true);
-      return;
-    }
-
     const droppedFile = e.dataTransfer.files[0];
     if (droppedFile && droppedFile.type === "application/pdf") {
       const event = {
@@ -165,20 +159,12 @@ const FileUploadComponent: React.FC<FileUploadComponentProps> = () => {
 
   const handleAreaClick = (): void => {
     if (!isUploading && !isProcessing) {
-      if (!isSignedIn) {
-        setShowAuthPrompt(true);
-      }
+      fileInputRef.current?.click();
     }
   };
 
   const handleSelectPdfClick = (e: React.MouseEvent<HTMLDivElement>): void => {
     e.stopPropagation();
-
-    if (!isSignedIn) {
-      setShowAuthPrompt(true);
-      return;
-    }
-
     if (!isUploading && !isProcessing) {
       fileInputRef.current?.click();
     }

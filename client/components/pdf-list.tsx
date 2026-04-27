@@ -17,7 +17,7 @@ const PDFListComponent: React.FC<PDFListComponentProps> = ({
   setSelectedPDF,
   onRefresh,
 }) => {
-  const { getToken } = useAuth();
+  const { getAuthHeaders } = useAuth();
 
   const handleDeletePDF = async (
     collectionName: string,
@@ -32,17 +32,12 @@ const PDFListComponent: React.FC<PDFListComponentProps> = ({
     button.classList.add("opacity-50", "cursor-not-allowed");
 
     try {
-      const token = getToken();
-      if (!token) {
-        throw new Error("Authentication required");
-      }
-
       const response = await fetch(
         `${process.env.NEXT_PUBLIC_ROOT_URL}/pdf/${collectionName}`,
         {
           method: "DELETE",
           headers: {
-            Authorization: `Bearer ${token}`,
+            ...getAuthHeaders(),
           },
         }
       );
@@ -66,9 +61,7 @@ const PDFListComponent: React.FC<PDFListComponentProps> = ({
       onRefresh(updatedPDFs);
     } catch (error) {
       console.error("Error deleting PDF:", error);
-      alert(
-        error instanceof Error ? error.message : "Failed to delete PDF"
-      );
+      alert(error instanceof Error ? error.message : "Failed to delete PDF");
       button.disabled = false;
       button.classList.remove("opacity-50", "cursor-not-allowed");
       onRefresh();
@@ -84,7 +77,7 @@ const PDFListComponent: React.FC<PDFListComponentProps> = ({
   }
 
   return (
-    <div className="flex-1 overflow-y-auto">
+    <div className="flex-1 overflow-y-auto [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-gray-700 [&::-webkit-scrollbar-track]:bg-gray-900">
       <div className="space-y-1">
         <button
           onClick={() => setSelectedPDF(null)}

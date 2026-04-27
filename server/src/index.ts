@@ -18,6 +18,7 @@ import pdfRoutes from "./routes/pdf.route.js";
 import fs from "fs";
 import mongoose from "mongoose";
 import PDFMetadata from "./models/pdf.model.js";
+import ChatMessage from "./models/chat.model.js";
 import cron from "node-cron";
 
 // Initialize Qdrant client
@@ -88,7 +89,7 @@ const worker = new Worker(
     try {
       console.log("Processing job:", job.data);
       const data = job.data;
-      const userId = new mongoose.Types.ObjectId(data.userId as string);
+      const userId = data.userId as string; // May be a MongoDB ObjectId string or guest_... ID
       let fileExists = false;
       let attempts = 0;
       const maxAttempts = 5;
@@ -305,10 +306,12 @@ app.get("/health", (req: Request, res: Response) => {
   });
 });
 
-// Keep-alive function
+// Keep-alive function (production only — skipped if RENDER_URL is not set)
 const keepAlive = async () => {
+  const url = process.env.RENDER_URL;
+  if (!url) return; // local dev: skip silently
+
   try {
-    const url = process.env.RENDER_URL;
     const response = await fetch(`${url}/health`);
 
     if (response.ok) {
@@ -325,6 +328,42 @@ const keepAlive = async () => {
 cron.schedule("*/14 * * * *", () => {
   console.log("Running keep-alive cron job...");
   keepAlive();
+});
+
+// Clean up expired guest data daily (guest PDFs and chats older than 48 hours)
+cron.schedule("0 3 * * *", async () => {
+  try {
+    const cutoff = new Date(Date.now() - 48 * 60 * 60 * 1000);
+    const expiredGuestPdfs = await PDFMetadata.find({
+      userId: { $regex: /^guest_/ },
+      uploadTime: { $lt: cutoff },
+    });
+
+    for (const pdf of expiredGuestPdfs) {
+      // Delete from Qdrant
+      try {
+        await qdrantClient.deleteCollection(pdf.collectionName);
+      } catch (_) {}
+      // Delete file from disk
+      if (pdf.filePath && fs.existsSync(pdf.filePath)) {
+        fs.unlinkSync(pdf.filePath);
+      }
+      // Delete MongoDB record
+      await PDFMetadata.deleteOne({ _id: pdf._id });
+    }
+
+    // Clean up guest chat messages older than 48h
+    await ChatMessage.deleteMany({
+      userId: { $regex: /^guest_/ },
+      timestamp: { $lt: cutoff },
+    });
+
+    if (expiredGuestPdfs.length > 0) {
+      console.log(`Guest cleanup: removed ${expiredGuestPdfs.length} expired PDF(s)`);
+    }
+  } catch (err) {
+    console.error("Guest cleanup error:", err);
+  }
 });
 
 const PORT = process.env.PORT || 8000;
