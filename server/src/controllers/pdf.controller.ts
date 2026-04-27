@@ -438,10 +438,7 @@ Please provide a detailed, well-structured summary:`;
 
         const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
         const geminiResponse = await model.generateContent(SUMMARY_PROMPT);
-        responseText = geminiResponse.response
-          .text()
-          .replace(/\*_/g, "*") // Remove italic markers when combined with bold
-          .replace(/_/g, ""); // Remove all remaining italic markers
+        responseText = geminiResponse.response.text();
 
         documents = [];
       }
@@ -528,10 +525,7 @@ Please provide a detailed answer based on the information in the documents:`;
 
         const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
         const geminiResponse = await model.generateContent(QA_PROMPT);
-        responseText = geminiResponse.response
-          .text()
-          .replace(/\*_/g, "*") // Remove italic markers when combined with bold
-          .replace(/_/g, ""); // Remove all remaining italic markers
+        responseText = geminiResponse.response.text();
         documents = allRelevantDocs.map((doc) => ({
           pageContent: doc.pageContent,
           metadata: doc.metadata,

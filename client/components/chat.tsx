@@ -5,6 +5,8 @@ import { SendIcon } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import SignInPrompt from "./prompt";
 import { IPDF, IMessage, ChatResponse, IDocument } from "../app/types";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 
 interface ChatComponentProps {
   selectedPDF: string | null;
@@ -86,17 +88,6 @@ const ChatComponent: React.FC<ChatComponentProps> = ({
       setShowAuthPrompt(false);
     }
   }, [isSignedIn]);
-
-  const formatResponse = (content: string): string => {
-    return content
-      .replace(/\n/g, "<br />")
-      .replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>")
-      .replace(/\*(.*?)\*/g, "<em>$1</em>")
-      .replace(/- /g, "<br />- ")
-      .replace(/(\d+\. )/g, "<br />$1")
-      .replace(/• /g, "<br />• ")
-      .replace(/\n\n/g, "<br /><br />");
-  };
 
   const setCurrentChatLoading = (isLoading: boolean): void => {
     setLoadingStates({
@@ -239,12 +230,26 @@ const ChatComponent: React.FC<ChatComponentProps> = ({
                 }`}
             >
               {msg.role === "assistant" ? (
-                <div
-                  className="whitespace-pre-wrap"
-                  dangerouslySetInnerHTML={{
-                    __html: formatResponse(msg.content || ""),
-                  }}
-                />
+                <div className="prose prose-invert prose-sm max-w-none">
+                  <ReactMarkdown
+                    remarkPlugins={[remarkGfm]}
+                    components={{
+                      p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
+                      ul: ({ children }) => <ul className="list-disc pl-4 mb-2 space-y-1">{children}</ul>,
+                      ol: ({ children }) => <ol className="list-decimal pl-4 mb-2 space-y-1">{children}</ol>,
+                      li: ({ children }) => <li className="leading-relaxed">{children}</li>,
+                      strong: ({ children }) => <strong className="font-semibold text-white">{children}</strong>,
+                      em: ({ children }) => <em className="italic text-gray-300">{children}</em>,
+                      code: ({ children }) => <code className="bg-gray-800 text-indigo-300 px-1 py-0.5 rounded text-xs font-mono">{children}</code>,
+                      pre: ({ children }) => <pre className="bg-gray-800 p-3 rounded-lg overflow-x-auto mb-2 text-xs">{children}</pre>,
+                      h1: ({ children }) => <h1 className="text-lg font-bold mb-2">{children}</h1>,
+                      h2: ({ children }) => <h2 className="text-base font-bold mb-2">{children}</h2>,
+                      h3: ({ children }) => <h3 className="text-sm font-bold mb-1">{children}</h3>,
+                    }}
+                  >
+                    {msg.content || ""}
+                  </ReactMarkdown>
+                </div>
               ) : (
                 msg.content
               )}
