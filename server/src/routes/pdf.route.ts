@@ -7,16 +7,16 @@ import {
   deletePdf,
   getChatHistory,
 } from "../controllers/pdf.controller";
-import { clerkAuth } from "../middlewares/clerk.middleware";
+import { authMiddleware } from "../middlewares/auth.middleware";
 import { upload } from "../utils/multer";
 
 const router = express.Router();
 
-router.post("/upload/pdf", clerkAuth, upload.single("pdf"), uploadPdf);
-router.get("/pdfs", clerkAuth, getPdfs);
-router.get("/chat", clerkAuth, chatWithPdf);
+router.post("/upload/pdf", authMiddleware, upload.single("pdf"), uploadPdf);
+router.get("/pdfs", authMiddleware, getPdfs);
+router.get("/chat", authMiddleware, chatWithPdf);
 router.get("/job/:id", getJobStatus);
-router.delete("/pdf/:collectionName", clerkAuth, deletePdf);
-router.get("/chat/history", clerkAuth, getChatHistory);
+router.delete("/pdf/:collectionName", authMiddleware, deletePdf);
+router.get("/chat/history", authMiddleware, getChatHistory);
 
 export default router;

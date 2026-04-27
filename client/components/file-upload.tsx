@@ -2,7 +2,7 @@
 
 import { Upload, CheckCircle, AlertCircle, Loader2 } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
-import { useAuth } from "@clerk/nextjs";
+import { useAuth } from "@/lib/auth-context";
 import SignInPrompt from "./prompt";
 import { UploadStatus } from "../app/types";
 
@@ -32,16 +32,16 @@ const FileUploadComponent: React.FC<FileUploadComponentProps> = () => {
   }, [jobId, uploadStatus]);
 
   // Add this useEffect to clear upload state when signing out
-useEffect(() => {
-  if (!isSignedIn) {
-    setFileSize("");
-    setFileName("");
-    setUploadStatus(UploadStatus.IDLE);
-    setStatusMessage("");
-    setJobId(null);
-    setShowAuthPrompt(false);
-  }
-}, [isSignedIn]);
+  useEffect(() => {
+    if (!isSignedIn) {
+      setFileSize("");
+      setFileName("");
+      setUploadStatus(UploadStatus.IDLE);
+      setStatusMessage("");
+      setJobId(null);
+      setShowAuthPrompt(false);
+    }
+  }, [isSignedIn]);
 
   const checkJobStatus = async (): Promise<void> => {
     if (!jobId) return;
@@ -89,9 +89,7 @@ useEffect(() => {
     setStatusMessage("Uploading file...");
 
     try {
-      const token = await getToken();
-      // console.log(token);
-      
+      const token = getToken();
       const formData = new FormData();
       formData.append("pdf", selectedFile);
 
@@ -103,7 +101,7 @@ useEffect(() => {
         body: formData
       });
       // console.log(response);
-      
+
 
       const data = await response.json();
 
@@ -211,11 +209,10 @@ useEffect(() => {
       <div
         className={`border-2 border-dashed border-gray-800 rounded-lg flex-1 flex justify-center items-center transition-colors duration-300 cursor-pointer 
         ${isHovered ? "border-indigo-900 bg-[#121212fd]" : ""} 
-        ${
-          isUploading || isProcessing
+        ${isUploading || isProcessing
             ? "cursor-wait opacity-80"
             : "hover:bg-[#121212fd] hover:border-indigo-900"
-        } 
+          } 
         ${isSuccess ? "border-green-900" : ""} 
         ${isError ? "border-red-900" : ""}`}
         onClick={handleAreaClick}
@@ -259,13 +256,12 @@ useEffect(() => {
             <p className="text-gray-500 text-xs md:text-sm mb-2">{fileSize}</p>
 
             <p
-              className={`text-sm mb-3 md:mb-4 ${
-                isSuccess
+              className={`text-sm mb-3 md:mb-4 ${isSuccess
                   ? "text-green-500"
                   : isError
-                  ? "text-red-500"
-                  : "text-indigo-400"
-              }`}
+                    ? "text-red-500"
+                    : "text-indigo-400"
+                }`}
             >
               {statusMessage}
             </p>

@@ -213,14 +213,12 @@ export const uploadPdf = async (req: Request, res: Response): Promise<void> => {
     return;
   }
 
-  const clerkUserId = (req as any).auth.userId;
+  const userId = (req as any).userId;
 
   try {
-    // SOLUTION 1: Verify file exists before adding to queue
     const filePath = req.file.path;
 
-    // Wait a bit and verify file exists
-    await new Promise((resolve) => setTimeout(resolve, 100)); // Small delay
+    await new Promise((resolve) => setTimeout(resolve, 100));
 
     if (!fs.existsSync(filePath)) {
       console.error(`File does not exist after upload: ${filePath}`);
@@ -231,7 +229,6 @@ export const uploadPdf = async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
-    // Also check file size to ensure it's fully written
     const stats = fs.statSync(filePath);
     if (stats.size === 0) {
       console.error(`File is empty after upload: ${filePath}`);
@@ -244,31 +241,21 @@ export const uploadPdf = async (req: Request, res: Response): Promise<void> => {
 
     console.log(`File verified: ${filePath} (${stats.size} bytes)`);
 
-    // Find or create the user in your MongoDB
-    const user = await User.findOneAndUpdate(
-      { clerkId: clerkUserId },
-      {},
-      { upsert: true, new: true }
-    );
-
-    // Add to queue for processing with user ID
     const job = await queue.add(
       "file",
       {
-        userId: user._id,
-        clerkId: clerkUserId,
+        userId: userId,
         filename: req.file.originalname,
         destination: req.file.destination,
-        path: filePath, // Use the verified path
+        path: filePath,
       },
       {
-        // SOLUTION 2: Add job options for retry and delay
         attempts: 3,
         backoff: {
           type: "exponential",
           delay: 2000,
         },
-        delay: 500, // Wait 500ms before processing
+        delay: 500,
       }
     );
 
@@ -280,7 +267,6 @@ export const uploadPdf = async (req: Request, res: Response): Promise<void> => {
   } catch (error) {
     console.error("Error processing upload:", error);
 
-    // Clean up file if it exists
     if (req.file?.path && fs.existsSync(req.file.path)) {
       try {
         fs.unlinkSync(req.file.path);
@@ -299,19 +285,10 @@ export const uploadPdf = async (req: Request, res: Response): Promise<void> => {
 
 export const getPdfs = async (req: Request, res: Response): Promise<void> => {
   try {
-    const clerkUserId = (req as any).auth.userId;
+    const userId = (req as any).userId;
 
-    // Find the user in MongoDB
-    const user = await User.findOne({ clerkId: clerkUserId });
-    if (!user) {
-      res.json({ success: true, pdfs: [] }); // No user means no PDFs
-      return;
-    }
-
-    // Find PDFs associated with this user
-    const pdfs = await PDFMetadata.find({ userId: user._id })
-      .sort({ uploadTime: -1 })
-      .populate("userId", "name email"); // Optional: populate user info
+    const pdfs = await PDFMetadata.find({ userId })
+      .sort({ uploadTime: -1 });
 
     res.json({
       success: true,
@@ -333,7 +310,7 @@ export const chatWithPdf = async (
   try {
     const userQuery = req.query.message as string;
     const collectionName = req.query.collection as string;
-    const clerkUserId = (req as any).auth.userId;
+    const userId = (req as any).userId;
 
     if (!userQuery) {
       res.status(400).json({
@@ -343,8 +320,7 @@ export const chatWithPdf = async (
       return;
     }
 
-    // Find the user in MongoDB using Clerk ID
-    const user = await User.findOne({ clerkId: clerkUserId });
+    const user = await User.findById(userId);
     if (!user) {
       res.status(404).json({
         success: false,
@@ -354,8 +330,7 @@ export const chatWithPdf = async (
     }
 
     console.log(
-      `Processing query: "${userQuery}" for collection: ${
-        collectionName || "all"
+      `Processing query: "${userQuery}" for collection: ${collectionName || "all"
       }`
     );
 
@@ -632,14 +607,13 @@ export const getJobStatus = async (
 export const deletePdf = async (req: Request, res: Response): Promise<void> => {
   try {
     const { collectionName } = req.params;
-    const clerkUserId = (req as any).auth.userId;
+    const userId = (req as any).userId;
 
     console.log(
-      `Delete request for collection: ${collectionName}, user: ${clerkUserId}`
+      `Delete request for collection: ${collectionName}, user: ${userId}`
     );
 
-    // 1. Find user first
-    const user = await User.findOne({ clerkId: clerkUserId });
+    const user = await User.findById(userId);
     if (!user) {
       console.log("User not found");
       res.status(404).json({
@@ -777,16 +751,9 @@ export const getChatHistory = async (
 ): Promise<void> => {
   try {
     const { collectionName, limit } = req.query;
-    const clerkUserId = (req as any).auth.userId;
+    const userId = (req as any).userId;
 
-    // First find the user in MongoDB using Clerk ID
-    const user = await User.findOne({ clerkId: clerkUserId });
-    if (!user) {
-      res.json({ success: true, messages: [] }); // No user means no messages
-      return;
-    }
-
-    const query: any = { userId: user._id }; // Use MongoDB user ID
+    const query: any = { userId };
     if (collectionName) {
       query.collectionName = collectionName;
     } else {

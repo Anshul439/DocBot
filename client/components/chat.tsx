@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import { SendIcon } from "lucide-react";
-import { useAuth } from "@clerk/nextjs";
+import { useAuth } from "@/lib/auth-context";
 import SignInPrompt from "./prompt";
 import { IPDF, IMessage, ChatResponse, IDocument } from "../app/types";
 
@@ -125,12 +125,11 @@ const ChatComponent: React.FC<ChatComponentProps> = ({
     setCurrentChatLoading(true);
 
     try {
-      const token = await getToken();
+      const token = getToken();
       if (!token) throw new Error("No authentication token available");
 
-      let url = `${
-        process.env.NEXT_PUBLIC_ROOT_URL
-      }/chat?message=${encodeURIComponent(message)}`;
+      let url = `${process.env.NEXT_PUBLIC_ROOT_URL
+        }/chat?message=${encodeURIComponent(message)}`;
       if (selectedPDF) {
         url += `&collection=${encodeURIComponent(selectedPDF)}`;
       }
@@ -230,16 +229,14 @@ const ChatComponent: React.FC<ChatComponentProps> = ({
         {chatHistory.map((msg, index) => (
           <div
             key={index}
-            className={`flex flex-col ${
-              msg.role === "user" ? "items-end" : "items-start"
-            }`}
+            className={`flex flex-col ${msg.role === "user" ? "items-end" : "items-start"
+              }`}
           >
             <div
-              className={`max-w-[90%] md:max-w-[80%] p-2 md:p-3 rounded-lg text-sm md:text-base ${
-                msg.role === "user"
+              className={`max-w-[90%] md:max-w-[80%] p-2 md:p-3 rounded-lg text-sm md:text-base ${msg.role === "user"
                   ? "bg-indigo-600 text-white"
                   : "bg-[#1A1A1A] text-white"
-              }`}
+                }`}
             >
               {msg.role === "assistant" ? (
                 <div
@@ -313,11 +310,10 @@ const ChatComponent: React.FC<ChatComponentProps> = ({
           <button
             onClick={handleSendMessage}
             disabled={!message.trim() || loading}
-            className={`p-1 md:p-2 rounded-lg mx-1 ${
-              !message.trim() || loading
+            className={`p-1 md:p-2 rounded-lg mx-1 ${!message.trim() || loading
                 ? "opacity-50 cursor-not-allowed"
                 : "bg-indigo-600 hover:bg-indigo-700 transition-all duration-200"
-            }`}
+              }`}
           >
             <SendIcon className="h-4 w-4 md:h-5 md:w-5 text-white" />
           </button>

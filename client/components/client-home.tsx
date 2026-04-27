@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import ChatComponent from "./chat";
 import FileUploadComponent from "./file-upload";
 import PDFListComponent from "./pdf-list";
-import { useAuth, useUser } from "@clerk/nextjs";
+import { useAuth } from "@/lib/auth-context";
 import { Menu, X } from "lucide-react";
 import {
   IMessage,
@@ -18,8 +18,7 @@ interface ClientHomePageProps {
 }
 
 export default function ClientHomePage({ isSignedIn: serverIsSignedIn }: ClientHomePageProps) {
-  const { isSignedIn, getToken } = useAuth();
-  const { user } = useUser();
+  const { isSignedIn, getToken, user } = useAuth();
   const [availablePDFs, setAvailablePDFs] = useState<IPDF[]>([]);
   const [selectedPDF, setSelectedPDF] = useState<string | null>(null);
   const [chatHistories, setChatHistories] = useState<
@@ -50,7 +49,7 @@ export default function ClientHomePage({ isSignedIn: serverIsSignedIn }: ClientH
     }
 
     try {
-      const token = await getToken();
+      const token = getToken();
       const response = await fetch(`${process.env.NEXT_PUBLIC_ROOT_URL}/pdfs`, {
         headers: {
           Authorization: `Bearer ${token}`,
@@ -117,14 +116,13 @@ export default function ClientHomePage({ isSignedIn: serverIsSignedIn }: ClientH
       if (!effectiveIsSignedIn) return;
 
       try {
-        const token = await getToken();
+        const token = getToken();
         if (!token) {
           throw new Error("No authentication token available");
         }
 
         const response = await fetch(
-          `${process.env.NEXT_PUBLIC_ROOT_URL}/chat/history?collectionName=${
-            collectionName || ""
+          `${process.env.NEXT_PUBLIC_ROOT_URL}/chat/history?collectionName=${collectionName || ""
           }`,
           {
             headers: {
@@ -205,9 +203,8 @@ export default function ClientHomePage({ isSignedIn: serverIsSignedIn }: ClientH
 
       {/* Sidebar with consistent width */}
       <div
-        className={`${
-          mobileSidebarOpen ? "translate-x-0" : "-translate-x-full"
-        } md:translate-x-0 fixed md:relative inset-0 z-40 md:z-auto w-72 md:w-[30%] lg:w-[25%] bg-[#000000f7] md:bg-transparent border-r border-gray-800 flex flex-col transition-transform duration-300 ease-in-out`}
+        className={`${mobileSidebarOpen ? "translate-x-0" : "-translate-x-full"
+          } md:translate-x-0 fixed md:relative inset-0 z-40 md:z-auto w-72 md:w-[30%] lg:w-[25%] bg-[#000000f7] md:bg-transparent border-r border-gray-800 flex flex-col transition-transform duration-300 ease-in-out`}
       >
         <div className="p-3 sm:p-4 h-1/2 flex flex-col overflow-hidden">
           <div className="flex justify-end md:justify-start items-center mb-3">
@@ -237,7 +234,7 @@ export default function ClientHomePage({ isSignedIn: serverIsSignedIn }: ClientH
             onClick={handleOverlayClick}
           />
         )}
-        
+
         <ChatComponent
           selectedPDF={selectedPDF}
           chatHistory={

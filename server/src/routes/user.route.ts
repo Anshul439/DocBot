@@ -1,9 +1,11 @@
 import express from "express";
-import { clerkAuth } from "../middlewares/clerk.middleware.js";
-import { syncClerkUser } from "../controllers/user.controller.js";
+import { signup, signin, getMe } from "../controllers/user.controller.js";
+import { authMiddleware } from "../middlewares/auth.middleware.js";
 
 const router = express.Router();
 
-router.post("/sync", clerkAuth, syncClerkUser);
+router.post("/signup", signup);
+router.post("/signin", signin);
+router.get("/me", authMiddleware, getMe);
 
 export default router;

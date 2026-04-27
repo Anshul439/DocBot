@@ -31,7 +31,7 @@ export const queue = new Queue("file-upload-queue", {
     username: "default",
     password: process.env.REDIS_PASSWORD,
     host: process.env.REDIS_HOST,
-    port: 28452,
+    port: process.env.REDIS_PORT ? parseInt(process.env.REDIS_PORT) : 6379,
     tls: {
       rejectUnauthorized: false,
     },
@@ -84,7 +84,7 @@ const worker = new Worker(
     try {
       console.log("Processing job:", job.data);
       const data = job.data;
-      const userId = new mongoose.Types.ObjectId(data.userId);
+      const userId = new mongoose.Types.ObjectId(data.userId as string);
       let fileExists = false;
       let attempts = 0;
       const maxAttempts = 5;
@@ -102,8 +102,7 @@ const worker = new Worker(
             if (newStats.size === stats.size) {
               fileExists = true;
               console.log(
-                `File verified on attempt ${attempts + 1}: ${data.path} (${
-                  stats.size
+                `File verified on attempt ${attempts + 1}: ${data.path} (${stats.size
                 } bytes)`
               );
             } else {
@@ -261,7 +260,7 @@ const worker = new Worker(
       username: "default",
       password: process.env.REDIS_PASSWORD,
       host: process.env.REDIS_HOST,
-      port: 28452,
+      port: process.env.REDIS_PORT ? parseInt(process.env.REDIS_PORT) : 6379,
       tls: {
         rejectUnauthorized: false,
       },

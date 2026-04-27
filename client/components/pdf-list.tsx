@@ -1,7 +1,7 @@
 "use client";
 
 import { Trash2Icon } from "lucide-react";
-import { useAuth } from "@clerk/nextjs";
+import { useAuth } from "@/lib/auth-context";
 import { IPDF } from "../app/types";
 
 interface PDFListComponentProps {
@@ -32,7 +32,7 @@ const PDFListComponent: React.FC<PDFListComponentProps> = ({
     button.classList.add("opacity-50", "cursor-not-allowed");
 
     try {
-      const token = await getToken();
+      const token = getToken();
       if (!token) {
         throw new Error("Authentication required");
       }
@@ -88,11 +88,10 @@ const PDFListComponent: React.FC<PDFListComponentProps> = ({
       <div className="space-y-1">
         <button
           onClick={() => setSelectedPDF(null)}
-          className={`w-full text-left text-xs sm:text-sm px-2 py-1.5 sm:px-3 sm:py-2 rounded-md flex items-center justify-between ${
-            selectedPDF === null
-              ? "bg-indigo-600 text-white"
-              : "bg-[#1A1A1A] text-gray-300 hover:bg-[#252525]"
-          }`}
+          className={`w-full text-left text-xs sm:text-sm px-2 py-1.5 sm:px-3 sm:py-2 rounded-md flex items-center justify-between ${selectedPDF === null
+            ? "bg-indigo-600 text-white"
+            : "bg-[#1A1A1A] text-gray-300 hover:bg-[#252525]"
+            }`}
         >
           <span className="font-medium">All PDFs</span>
         </button>
@@ -100,11 +99,10 @@ const PDFListComponent: React.FC<PDFListComponentProps> = ({
         {pdfs.map((pdf) => (
           <div
             key={pdf.collectionName}
-            className={`rounded-md ${
-              selectedPDF === pdf.collectionName
-                ? "bg-indigo-600 text-white"
-                : "bg-[#1A1A1A] text-gray-300 hover:bg-[#252525]"
-            }`}
+            className={`rounded-md ${selectedPDF === pdf.collectionName
+              ? "bg-indigo-600 text-white"
+              : "bg-[#1A1A1A] text-gray-300 hover:bg-[#252525]"
+              }`}
           >
             <button
               onClick={() => setSelectedPDF(pdf.collectionName)}
