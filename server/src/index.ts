@@ -24,6 +24,7 @@ import cron from "node-cron";
 const qdrantClient = new QdrantClient({
   url: process.env.QDRANT_URL,
   apiKey: process.env.QDRANT_API_KEY,
+  checkCompatibility: false,
 });
 
 export const queue = new Queue("file-upload-queue", {
@@ -160,8 +161,8 @@ const worker = new Worker(
 
       // Create text splitter for better processing
       const textSplitter = new CharacterTextSplitter({
-        chunkSize: 500,
-        chunkOverlap: 100,
+        chunkSize: 1200,
+        chunkOverlap: 200,
       });
 
       // Split the documents into chunks
@@ -237,20 +238,9 @@ const worker = new Worker(
       return { collectionName, chunks: splitDocs.length };
     } catch (error) {
       console.error("Error processing PDF:", error);
-
-      // Clean up on error
-      if (job.data) {
-        try {
-          const data = job.data;
-          if (data.path && fs.existsSync(data.path)) {
-            fs.unlinkSync(data.path);
-            console.log(`Cleaned up file after processing error: ${data.path}`);
-          }
-        } catch (cleanupError) {
-          console.error("Error during cleanup:", cleanupError);
-        }
-      }
-
+      // Do NOT delete the file here — BullMQ may retry this job.
+      // The file will be cleaned up after all retry attempts are exhausted
+      // via the worker's 'failed' event handler below.
       throw error;
     }
   },
@@ -277,6 +267,19 @@ worker.on("failed", (job, err, prev) => {
   console.error(
     `Worker failed processing job ${job?.id} with error: ${err.message}`
   );
+
+  // Clean up the uploaded file only when all retries are exhausted
+  const attemptsRemaining = (job?.opts?.attempts ?? 1) - (job?.attemptsMade ?? 1);
+  if (attemptsRemaining <= 0 && job?.data?.path) {
+    try {
+      if (fs.existsSync(job.data.path)) {
+        fs.unlinkSync(job.data.path);
+        console.log(`Cleaned up file after all retries exhausted: ${job.data.path}`);
+      }
+    } catch (cleanupError) {
+      console.error("Error during final cleanup:", cleanupError);
+    }
+  }
 });
 
 worker.on("completed", (job, result) => {
