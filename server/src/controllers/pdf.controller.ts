@@ -387,8 +387,18 @@ export const chatWithPdf = async (
       modelName: "gemini-embedding-001",
     });
 
+    // ── SSE headers ──────────────────────────────────────────────────────────
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache");
+    res.setHeader("Connection", "keep-alive");
+    res.setHeader("X-Accel-Buffering", "no"); // disable nginx buffering
+    res.flushHeaders();
+
+    const sendEvent = (payload: object) =>
+      res.write(`data: ${JSON.stringify(payload)}\n\n`);
+
     const isSummary = isSummaryRequest(userQuery);
-    let responseText = "";
+    let fullText = "";
     let documents: DocumentResult[] = [];
     let isSummaryResponse = false;
 
@@ -403,8 +413,8 @@ export const chatWithPdf = async (
       );
 
       if (comprehensiveContent.length === 0) {
-        responseText =
-          "I couldn't find sufficient content in the uploaded PDFs to create a summary.";
+        fullText = "I couldn't find sufficient content in the uploaded PDFs to create a summary.";
+        sendEvent({ type: "token", content: fullText });
         documents = [];
       } else {
         const summaryContext = comprehensiveContent
@@ -438,10 +448,13 @@ User Request: "${userQuery}"
 
 Please provide a detailed, well-structured summary:`;
 
-        const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
-        const geminiResponse = await model.generateContent(SUMMARY_PROMPT);
-        responseText = geminiResponse.response.text();
-
+      const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+        const stream = await model.generateContentStream(SUMMARY_PROMPT);
+        for await (const chunk of stream.stream) {
+          const text = chunk.text();
+          fullText += text;
+          if (text) sendEvent({ type: "token", content: text });
+        }
         documents = [];
       }
     } else {
@@ -495,8 +508,8 @@ Please provide a detailed, well-structured summary:`;
       }
 
       if (allRelevantDocs.length === 0) {
-        responseText =
-          "I couldn't find any relevant information in the uploaded PDFs to answer your question.";
+        fullText = "I couldn't find any relevant information in the uploaded PDFs to answer your question.";
+        sendEvent({ type: "token", content: fullText });
         documents = [];
       } else {
         const context = allRelevantDocs
@@ -526,8 +539,12 @@ USER QUESTION: ${userQuery}
 Please provide a detailed answer based on the information in the documents:`;
 
         const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
-        const geminiResponse = await model.generateContent(QA_PROMPT);
-        responseText = geminiResponse.response.text();
+        const stream = await model.generateContentStream(QA_PROMPT);
+        for await (const chunk of stream.stream) {
+          const text = chunk.text();
+          fullText += text;
+          if (text) sendEvent({ type: "token", content: text });
+        }
         documents = allRelevantDocs.map((doc) => ({
           pageContent: doc.pageContent,
           metadata: doc.metadata,
@@ -535,35 +552,41 @@ Please provide a detailed answer based on the information in the documents:`;
       }
     }
 
-    // Save assistant response to history
+    // Send documents + done signal
+    sendEvent({ type: "documents", documents });
+    sendEvent({ type: "done", isSummary: isSummaryResponse });
+    res.end();
+
+    // Persist assistant response to DB (after streaming, non-blocking)
     try {
       await ChatMessage.create({
         userId: effectiveUserId,
         collectionName: collectionName || null,
         role: "assistant",
-        content: responseText,
-        documents: documents,
+        content: fullText,
+        documents,
         isSummary: isSummaryResponse,
         timestamp: new Date(),
       });
-    } catch (error) {
-      console.error("Error saving assistant message:", error);
+    } catch (err) {
+      console.error("Error saving assistant message:", err);
     }
-
-    res.json({
-      success: true,
-      message: responseText,
-      documents: documents,
-      query: userQuery,
-      isSummary: isSummaryResponse,
-    });
-  } catch (error) {
+  } catch (error: any) {
     console.error("Error in chat endpoint:", error);
-    res.status(500).json({
-      success: false,
-      error: "Internal server error",
-      message: "Sorry, I encountered an error processing your request.",
-    });
+    const userMsg =
+      error?.status === 503
+        ? "Gemini is temporarily overloaded — please try again in a few seconds."
+        : "Something went wrong. Please try again.";
+    if (res.headersSent) {
+      res.write(`data: ${JSON.stringify({ type: "error", message: userMsg })}\n\n`);
+      res.end();
+    } else {
+      res.status(500).json({
+        success: false,
+        error: "Internal server error",
+        message: "Sorry, I encountered an error processing your request.",
+      });
+    }
   }
 };
 

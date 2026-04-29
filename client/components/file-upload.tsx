@@ -193,7 +193,7 @@ const FileUploadComponent: React.FC<FileUploadComponentProps> = () => {
   return (
     <>
       <div
-        className={`border-2 border-dashed border-gray-800 rounded-lg flex-1 flex justify-center items-center transition-colors duration-300 cursor-pointer 
+        className={`border-2 border-dashed border-gray-800 rounded-lg w-full flex flex-col justify-center items-center transition-colors duration-300 cursor-pointer py-6 md:py-8 min-h-[200px] md:min-h-[240px]
         ${isHovered ? "border-indigo-900 bg-[#121212fd]" : ""} 
         ${isUploading || isProcessing
             ? "cursor-wait opacity-80"

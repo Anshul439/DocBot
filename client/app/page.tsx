@@ -71,7 +71,9 @@ export default function Home() {
       </div>
 
       <GuestBanner />
-      <ClientHomePage isSignedIn={isSignedIn} />
+      <div className="flex-1 min-h-0 overflow-hidden">
+        <ClientHomePage isSignedIn={isSignedIn} />
+      </div>
 
       {showAuth && (
         <AuthModal

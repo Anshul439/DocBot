@@ -169,63 +169,100 @@ export default function ClientHomePage({ isSignedIn: serverIsSignedIn }: ClientH
   }, []);
 
   return (
-    <div className="flex flex-1 flex-col md:flex-row overflow-hidden relative">
-      {/* Fixed hamburger menu button - positioned to avoid overlap with title */}
-      <button
-        className="md:hidden fixed top-[18px] left-4 z-50 p-1.5 bg-[#1A1A1A] rounded-md border border-gray-700 shadow-sm"
-        onClick={handleMobileMenuClick}
-        aria-label="Toggle menu"
-      >
-        {mobileSidebarOpen ? <X size={18} /> : <Menu size={18} />}
-      </button>
+    <div className="flex h-full w-full overflow-hidden">
 
-      {/* Sidebar with consistent width */}
-      <div
-        className={`${mobileSidebarOpen ? "translate-x-0" : "-translate-x-full"
-          } md:translate-x-0 fixed md:relative inset-0 z-40 md:z-auto w-72 md:w-[30%] lg:w-[25%] bg-[#000000f7] md:bg-transparent border-r border-gray-800 flex flex-col transition-transform duration-300 ease-in-out`}
+      {/* ── SIDEBAR ─────────────────────────────────────────────────────────── */}
+      {/* Mobile: fixed full-screen overlay that slides in from the left       */}
+      {/* Desktop: static flex column, takes 28% of width                      */}
+      <aside
+        className={[
+          // positioning
+          "fixed inset-0 z-40",
+          "md:relative md:inset-auto md:z-auto",
+          // sizing
+          "md:w-80 lg:w-96",
+          // visibility — mobile slides, desktop always shown
+          mobileSidebarOpen ? "translate-x-0" : "-translate-x-full",
+          "md:translate-x-0",
+          // appearance
+          "bg-[#0a0a0a] border-r border-gray-800",
+          "flex flex-col overflow-hidden",
+          "transition-transform duration-300 ease-in-out",
+        ].join(" ")}
       >
-        <div className="p-3 sm:p-4 h-1/2 flex flex-col overflow-hidden">
-          <div className="flex justify-end md:justify-start items-center mb-3">
-            <h2 className="text-lg sm:text-xl">Upload PDF</h2>
-          </div>
+        {/* Close button — mobile only */}
+        <div className="md:hidden flex items-center justify-between px-4 py-3 border-b border-gray-800">
+          <span className="text-sm font-semibold text-gray-300">Menu</span>
+          <button onClick={handleOverlayClick} className="p-1 rounded hover:bg-white/5">
+            <X size={18} />
+          </button>
+        </div>
+
+        {/* Upload section */}
+        <div className="shrink-0 p-4 border-b border-gray-800">
+          <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-3">Upload PDF</h2>
           <FileUploadComponent />
         </div>
 
-        <div className="border-t border-gray-800 p-3 sm:p-4 h-1/2 flex flex-col overflow-hidden">
-          <div className="flex justify-end md:justify-start items-center mb-3">
-            <h2 className="text-lg sm:text-xl">Your PDFs</h2>
+        {/* PDF list */}
+        <div className="flex-1 min-h-0 p-4 flex flex-col">
+          <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-3">Your PDFs</h2>
+          <div className="flex-1 min-h-0 flex flex-col">
+            <PDFListComponent
+              pdfs={availablePDFs}
+              selectedPDF={selectedPDF}
+              setSelectedPDF={(pdf) => {
+                handleSelectPDF(pdf);
+                setMobileSidebarOpen(false); // close sidebar when selecting on mobile
+              }}
+              onRefresh={fetchAvailablePDFs}
+            />
           </div>
-          <PDFListComponent
-            pdfs={availablePDFs}
+        </div>
+      </aside>
+
+      {/* Mobile overlay backdrop */}
+      {mobileSidebarOpen && (
+        <div
+          className="md:hidden fixed inset-0 bg-black/60 z-30"
+          onClick={handleOverlayClick}
+        />
+      )}
+
+      {/* ── MAIN CONTENT ────────────────────────────────────────────────────── */}
+      <div className="flex-1 min-w-0 min-h-0 flex flex-col overflow-hidden">
+        {/* Mobile top bar with hamburger */}
+        <div className="md:hidden flex items-center gap-3 px-4 py-3 border-b border-gray-800 shrink-0">
+          <button
+            onClick={handleMobileMenuClick}
+            className="p-1.5 bg-[#1A1A1A] rounded-md border border-gray-700"
+            aria-label="Open menu"
+          >
+            <Menu size={18} />
+          </button>
+          <span className="text-sm text-gray-400 truncate">
+            {selectedPDF
+              ? availablePDFs.find(p => p.collectionName === selectedPDF)?.originalFilename || "PDF"
+              : availablePDFs.length > 1 ? `${availablePDFs.length} PDFs` : "All PDFs"}
+          </span>
+        </div>
+
+        {/* Chat */}
+        <div className="flex-1 min-h-0 overflow-hidden">
+          <ChatComponent
             selectedPDF={selectedPDF}
-            setSelectedPDF={handleSelectPDF}
-            onRefresh={fetchAvailablePDFs}
+            chatHistory={
+              selectedPDF
+                ? chatHistories[selectedPDF] || []
+                : chatHistories["all"]
+            }
+            updateChatHistory={updateChatHistory}
+            availablePDFs={availablePDFs}
+            hasPDFs={hasPDFs}
+            loadingStates={loadingStates}
+            setLoadingStates={setLoadingStates}
           />
         </div>
-      </div>
-
-      {/* Chat Section */}
-      <div className="w-full md:w-[70%] lg:w-[75%] overflow-hidden relative">
-        {mobileSidebarOpen && (
-          <div
-            className="md:hidden fixed inset-0 bg-black bg-opacity-50 z-30"
-            onClick={handleOverlayClick}
-          />
-        )}
-
-        <ChatComponent
-          selectedPDF={selectedPDF}
-          chatHistory={
-            selectedPDF
-              ? chatHistories[selectedPDF] || []
-              : chatHistories["all"]
-          }
-          updateChatHistory={updateChatHistory}
-          availablePDFs={availablePDFs}
-          hasPDFs={hasPDFs}
-          loadingStates={loadingStates}
-          setLoadingStates={setLoadingStates}
-        />
       </div>
     </div>
   );
