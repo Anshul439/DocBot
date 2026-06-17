@@ -1,0 +1,12 @@
+export const CHUNK_SIZE = 1200;
+export const CHUNK_OVERLAP = 200;
+export const EMBEDDING_BATCH_SIZE = 40;
+export const VECTOR_SIZE = 3072;
+export const SIMILARITY_TOP_K = 4;
+export const SUMMARY_SCROLL_LIMIT = 15;
+export const SUMMARY_CHUNK_LIMIT = 10;
+export const GENERATION_MODEL = "gemini-2.5-flash";
+export const EMBEDDING_MODEL = "gemini-embedding-001";
+export const GUEST_TTL_HOURS = 48;
+export const WORKER_CONCURRENCY = 5;
+export const FILE_VERIFY_MAX_ATTEMPTS = 5;
