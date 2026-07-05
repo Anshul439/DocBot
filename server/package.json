@@ -22,7 +22,7 @@
     "@qdrant/js-client-rest": "^1.18.0",
     "bcryptjs": "^3.0.3",
     "bullmq": "^5",
-    "concurrently": "^9.1.2",
+    "concurrently": "^10.0.3",
     "cors": "^2.8.5",
     "dotenv": "^16.5.0",
     "express": "^5.1.0",
