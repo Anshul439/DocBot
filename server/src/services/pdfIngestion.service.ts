@@ -1,3 +1,4 @@
+import fs from "fs";
 import path from "path";
 import { PDFLoader } from "@langchain/community/document_loaders/fs/pdf";
 import { CharacterTextSplitter } from "@langchain/textsplitters";
@@ -106,6 +107,17 @@ export async function ingestPdf(
   });
   await pdfMetadata.save();
   console.log(`Successfully saved PDF metadata to MongoDB: ${collectionName}`);
+
+  // The raw PDF file is no longer needed — all data lives in Qdrant and MongoDB.
+  // Delete it immediately to avoid accumulating dead files on disk.
+  try {
+    if (fs.existsSync(data.path)) {
+      fs.unlinkSync(data.path);
+      console.log(`Deleted local PDF after ingestion: ${data.path}`);
+    }
+  } catch (cleanupErr) {
+    console.error(`Failed to delete local PDF (non-fatal): ${cleanupErr}`);
+  }
 
   return { collectionName, chunks: splitDocs.length };
 }

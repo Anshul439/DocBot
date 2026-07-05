@@ -270,13 +270,10 @@ export const deletePdf = async (req: Request, res: Response): Promise<void> => {
       deletedCollection: collectionName,
     });
 
+    // Clean up Qdrant collection in the background — this can take a moment
+    // and doesn't need to block the response.
     setImmediate(async () => {
       try {
-        if (deletedPDF.filePath && fs.existsSync(deletedPDF.filePath)) {
-          fs.unlink(deletedPDF.filePath, (err) => {
-            if (err) console.error(`File deletion error: ${err}`);
-          });
-        }
         await deleteQdrantCollection(collectionName);
         console.log(`Qdrant collection deleted: ${collectionName}`);
       } catch (bgError) {

@@ -1,4 +1,3 @@
-import fs from "fs";
 import cron from "node-cron";
 import PDFMetadata from "../models/pdf.model";
 import ChatMessage from "../models/chat.model";
@@ -19,10 +18,6 @@ export function scheduleGuestCleanup(): void {
           await qdrantClient.deleteCollection(pdf.collectionName);
         } catch {
           // collection may already be gone
-        }
-
-        if (pdf.filePath && fs.existsSync(pdf.filePath)) {
-          fs.unlinkSync(pdf.filePath);
         }
 
         await PDFMetadata.deleteOne({ _id: pdf._id });
