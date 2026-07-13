@@ -30,6 +30,16 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
+function isTokenExpired(token: string): boolean {
+    try {
+        const payload = JSON.parse(atob(token.split(".")[1]));
+        // exp is in seconds, Date.now() is in milliseconds
+        return payload.exp * 1000 < Date.now();
+    } catch {
+        return true;
+    }
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
     const [user, setUser] = useState<User | null>(null);
     const [token, setToken] = useState<string | null>(null);
@@ -40,16 +50,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const storedToken = localStorage.getItem("auth_token");
         const storedUser = localStorage.getItem("auth_user");
         if (storedToken && storedUser) {
-            try {
-                setToken(storedToken);
-                setUser(JSON.parse(storedUser));
-            } catch {
+            if (isTokenExpired(storedToken)) {
                 localStorage.removeItem("auth_token");
                 localStorage.removeItem("auth_user");
+            } else {
+                try {
+                    setToken(storedToken);
+                    setUser(JSON.parse(storedUser));
+                } catch {
+                    localStorage.removeItem("auth_token");
+                    localStorage.removeItem("auth_user");
+                }
             }
         }
 
-        // Generate or restore guest ID
+
         let gid = localStorage.getItem("guest_id");
         if (!gid) {
             gid = `guest_${crypto.randomUUID()}`;
@@ -111,7 +126,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return localStorage.getItem("auth_token");
     }, []);
 
-    // Returns the right auth headers: JWT for signed-in users, guest ID for guests
+
     const getAuthHeaders = useCallback((): Record<string, string> => {
         const t = localStorage.getItem("auth_token");
         if (t) return { Authorization: `Bearer ${t}` };
