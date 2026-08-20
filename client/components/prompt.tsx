@@ -25,7 +25,7 @@ const SignInPrompt = ({ onClose, onSignIn }: { onClose: () => void; onSignIn?: (
 
   return (
     <div
-      className={`fixed inset-0 bg-black flex items-center justify-center z-50 transition-opacity duration-300 ease-in-out ${isVisible ? 'bg-opacity-70 opacity-100' : 'bg-opacity-0 opacity-0'
+      className={`fixed inset-0 flex items-center justify-center z-50 transition-all duration-300 ease-in-out ${isVisible ? 'bg-black/70 opacity-100' : 'bg-black/0 opacity-0'
         }`}
       onClick={(e) => e.target === e.currentTarget && handleClose()}
     >

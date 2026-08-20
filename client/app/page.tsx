@@ -28,16 +28,16 @@ export default function Home() {
   return (
     <div className="bg-[#000000f7] text-white h-screen flex flex-col">
       {/* Header */}
-      <div className="p-3 sm:p-4 pb-4 border-b border-gray-800 flex justify-between items-center relative">
-        <div className="w-8 md:w-0 flex-shrink-0 md:hidden" />
+      <div className="p-3 sm:p-4 pb-4 border-b border-gray-800 flex items-center relative">
+        <div className="flex-1 md:flex-none" />
 
-        <div className="flex items-center space-x-2 sm:space-x-4 flex-1 md:flex-initial justify-center md:justify-start">
+        <div className="flex items-center md:flex-1">
           <a href="/" className="hover:opacity-80 transition-opacity">
             <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">DocBot</h1>
           </a>
         </div>
 
-        <div className="flex items-center space-x-2 sm:space-x-4">
+        <div className="flex-1 flex items-center justify-end space-x-2 sm:space-x-4">
           {!isSignedIn ? (
             <button
               id="sign-in-btn"

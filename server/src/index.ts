@@ -11,7 +11,27 @@ import { scheduleKeepAlive } from "./cron/keepAlive.cron.js";
 import { scheduleGuestCleanup } from "./cron/guestCleanup.cron.js";
 
 const app = express();
-app.use(cors());
+
+const allowedOrigins = [
+  process.env.CLIENT_URL,
+  "https://docbot-pdf-rag.vercel.app",
+].filter(Boolean) as string[];
+
+const corsOptions: cors.CorsOptions = {
+  origin: (origin, callback) => {
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error(`CORS: origin '${origin}' not allowed`));
+    }
+  },
+  credentials: true,
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"],
+};
+
+app.options(/.*/, cors(corsOptions));
+app.use(cors(corsOptions));
 app.use(express.json());
 
 app.get("/health", (_req: Request, res: Response) => {

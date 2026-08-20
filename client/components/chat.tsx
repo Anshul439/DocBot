@@ -260,10 +260,10 @@ const ChatComponent: React.FC<ChatComponentProps> = ({
   const isBusy = loading || isStreaming;
 
   return (
-    <div className="grid h-full overflow-hidden" style={{ gridTemplateRows: "auto 1fr auto" }}>
-      {/* Status bar — auto */}
+    <div className="flex flex-col h-full overflow-hidden">
+      {/* Status bar */}
       {hasPDFs && (
-        <div className="border-b border-gray-800 px-3 py-2 text-xs text-gray-400">
+        <div className="shrink-0 border-b border-gray-800 px-3 py-2 text-xs text-gray-400">
           {selectedPDF ? (
             <span>
               Chatting with{" "}
@@ -286,10 +286,10 @@ const ChatComponent: React.FC<ChatComponentProps> = ({
         </div>
       )}
 
-      {/* Messages area — 1fr (fills remaining height) */}
+      {/* Messages area */}
       <div
         ref={messagesContainerRef}
-        className="overflow-y-auto p-3 sm:p-4 space-y-3 sm:space-y-4
+        className="flex-1 min-h-0 overflow-y-auto p-3 sm:p-4 space-y-3 sm:space-y-4
           [&::-webkit-scrollbar]:w-2
           [&::-webkit-scrollbar-thumb]:rounded-full
           [&::-webkit-scrollbar-thumb]:bg-gray-700
@@ -345,8 +345,8 @@ const ChatComponent: React.FC<ChatComponentProps> = ({
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Input bar — auto */}
-      <div className="border-t border-gray-800 p-2 sm:p-3 bg-[#000000f7]">
+      {/* Input bar */}
+      <div className="shrink-0 border-t border-gray-800 p-2 sm:p-3 bg-[#000000f7]">
         <div className="flex items-center bg-[#0F0F0F] rounded-xl overflow-hidden border border-gray-800 focus-within:border-gray-600 transition-colors">
           <input
             type="text"

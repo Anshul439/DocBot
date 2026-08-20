@@ -106,7 +106,7 @@ const PDFListComponent: React.FC<PDFListComponentProps> = ({
                   <div className="font-medium truncate">
                     {pdf.originalFilename}
                   </div>
-                  <div className="text-2xs opacity-70 mt-0.5 flex items-center space-x-1">
+                  <div className="text-xs opacity-70 mt-0.5 flex items-center space-x-1">
                     <span>{pdf.chunks} pages</span>
                   </div>
                 </div>

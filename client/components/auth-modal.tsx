@@ -66,7 +66,7 @@ export default function AuthModal({
             onClick={(e) => e.target === e.currentTarget && handleClose()}
         >
             <div
-                className={`relative bg-[#111111] border border-gray-800 rounded-2xl p-8 w-full max-w-sm mx-4 shadow-2xl transition-all duration-300 ${isVisible ? "translate-y-0 opacity-100" : "translate-y-6 opacity-0"
+                className={`relative bg-[#111111] border border-gray-800 rounded-2xl p-5 sm:p-8 w-full max-w-sm mx-4 shadow-2xl transition-all duration-300 ${isVisible ? "translate-y-0 opacity-100" : "translate-y-6 opacity-0"
                     }`}
             >
                 {/* Close Button */}
