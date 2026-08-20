@@ -15,6 +15,7 @@ const app = express();
 const allowedOrigins = [
   process.env.CLIENT_URL,
   "https://docbot-pdf-rag.vercel.app",
+  ...(process.env.NODE_ENV !== "production" ? ["http://localhost:3000"] : []),
 ].filter(Boolean) as string[];
 
 const corsOptions: cors.CorsOptions = {
