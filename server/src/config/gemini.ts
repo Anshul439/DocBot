@@ -9,5 +9,8 @@ export function createEmbeddings() {
 }
 
 export function getGenerativeModel() {
-  return genAI.getGenerativeModel({ model: GENERATION_MODEL });
+  return genAI.getGenerativeModel({
+    model: GENERATION_MODEL,
+    generationConfig: { temperature: 0.1 },
+  });
 }

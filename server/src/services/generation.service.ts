@@ -20,11 +20,13 @@ ${pdf.content}
     .join("\n\n");
 
   const prompt = `
-You are an expert at analyzing and summarizing PDF documents. 
-Your task is to create a comprehensive, well-structured summary based on the following content from ${comprehensiveContent.length} PDF document(s).
+You are an expert at analyzing and summarizing PDF documents.
+Your task is to create a comprehensive, well-structured summary based ONLY on the following content from ${comprehensiveContent.length} PDF document(s).
+
+IMPORTANT: Use ONLY the information present in the provided content below. Do not add facts or context from outside these documents. If the content is insufficient, say so clearly.
 
 Guidelines:
-1. Analyze the content thoroughly and identify the most important information
+1. Identify the most important information from the provided content
 2. Create a coherent summary that flows naturally
 3. Include key points, findings, and conclusions
 4. Maintain the original meaning and context
@@ -37,7 +39,7 @@ ${summaryContext}
 
 User Request: "${userQuery}"
 
-Please provide a detailed, well-structured summary:`;
+Please provide a detailed, well-structured summary based only on the content above:`;
 
   return streamModelResponse(prompt, onToken);
 }

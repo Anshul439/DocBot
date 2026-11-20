@@ -45,6 +45,16 @@ export const uploadPdf = async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
+    const header = Buffer.alloc(5);
+    const fd = fs.openSync(filePath, "r");
+    fs.readSync(fd, header, 0, 5, 0);
+    fs.closeSync(fd);
+    if (header.toString("ascii") !== "%PDF-") {
+      fs.unlinkSync(filePath);
+      res.status(400).json({ success: false, error: "File is not a valid PDF" });
+      return;
+    }
+
     console.log(`File verified: ${filePath} (${stats.size} bytes)`);
 
     const job = await queue.add(

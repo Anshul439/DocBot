@@ -5,6 +5,7 @@ import { qdrantClient } from "../config/qdrant";
 import { createEmbeddings } from "../config/gemini";
 import {
   SIMILARITY_TOP_K,
+  SIMILARITY_SCORE_THRESHOLD,
   SUMMARY_CHUNK_LIMIT,
   SUMMARY_SCROLL_LIMIT,
 } from "../config/rag.constants";
@@ -151,12 +152,19 @@ export async function similaritySearchAcrossCollections(
         }
       );
 
-      const docs = await vectorStore.similaritySearch(userQuery, SIMILARITY_TOP_K);
+      const docsWithScores = await vectorStore.similaritySearchWithScore(
+        userQuery,
+        SIMILARITY_TOP_K
+      );
 
-      if (docs.length > 0) {
+      const relevantDocs = docsWithScores.filter(
+        ([, score]) => score >= SIMILARITY_SCORE_THRESHOLD
+      );
+
+      if (relevantDocs.length > 0) {
         const originalFilename = await getOriginalFilename(collection, userId);
 
-        for (const doc of docs) {
+        for (const [doc] of relevantDocs) {
           allRelevantDocs.push({
             pageContent: doc.pageContent,
             metadata: {
