@@ -147,6 +147,17 @@ export async function processChatQuery(
       fullText = await streamSummary(userQuery, comprehensiveContent, (token) => {
         onEvent({ type: "token", content: token });
       });
+
+      documents = comprehensiveContent.map((c) => ({
+        pageContent: c.content,
+        metadata: {
+          originalFilename: c.filename,
+          collectionName: c.collectionName,
+          chunkCount: c.chunkCount,
+          totalChunks: c.totalChunks,
+          type: "summary",
+        },
+      }));
     }
   } else {
     documents = await similaritySearchAcrossCollections(

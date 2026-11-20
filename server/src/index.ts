@@ -50,7 +50,10 @@ const PORT = process.env.PORT || 8000;
 mongoose
   .connect(process.env.MONGO_URI!)
   .then(() => console.log("MongoDB connected"))
-  .catch((err) => console.error("MongoDB connection error:", err));
+  .catch((err) => {
+    console.error("MongoDB connection error:", err);
+    process.exit(1);
+  });
 
 app.use("/api/users", userRoutes);
 app.use("/", pdfRoutes);

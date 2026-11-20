@@ -1,7 +1,7 @@
 import fs from "fs";
 import path from "path";
 import { PDFLoader } from "@langchain/community/document_loaders/fs/pdf";
-import { CharacterTextSplitter } from "@langchain/textsplitters";
+import { RecursiveCharacterTextSplitter } from "@langchain/textsplitters";
 import { QdrantVectorStore } from "@langchain/qdrant";
 import PDFMetadata from "../models/pdf.model";
 import { qdrantClient } from "../config/qdrant";
@@ -47,7 +47,7 @@ export async function ingestPdf(
     throw new Error("No content found in PDF");
   }
 
-  const textSplitter = new CharacterTextSplitter({
+  const textSplitter = new RecursiveCharacterTextSplitter({
     chunkSize: CHUNK_SIZE,
     chunkOverlap: CHUNK_OVERLAP,
   });
