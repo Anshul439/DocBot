@@ -5,7 +5,7 @@ import PDFMetadata from "../models/pdf.model";
 import ChatMessage from "../models/chat.model";
 import User from "../models/user.model";
 import { queue } from "../config/queue";
-import { deleteQdrantCollection } from "../services/retrieval.service";
+import { deleteQdrantPoints } from "../services/retrieval.service";
 import {
   processChatQuery,
   resolveChatContext,
@@ -284,8 +284,8 @@ export const deletePdf = async (req: Request, res: Response): Promise<void> => {
     // and doesn't need to block the response.
     setImmediate(async () => {
       try {
-        await deleteQdrantCollection(collectionName);
-        console.log(`Qdrant collection deleted: ${collectionName}`);
+        await deleteQdrantPoints(collectionName);
+        console.log(`Qdrant points deleted for pdfId: ${collectionName}`);
       } catch (bgError) {
         console.error("Background cleanup error:", bgError);
       }

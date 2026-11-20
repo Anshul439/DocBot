@@ -4,6 +4,7 @@ export const EMBEDDING_BATCH_SIZE = 40;
 export const VECTOR_SIZE = 3072;
 export const SIMILARITY_TOP_K = 4;
 export const SIMILARITY_SCORE_THRESHOLD = 0.5;
+export const QDRANT_COLLECTION = "docbot";
 export const SUMMARY_SCROLL_LIMIT = 15;
 export const SUMMARY_CHUNK_LIMIT = 10;
 export const GENERATION_MODEL = "gemini-2.5-flash";

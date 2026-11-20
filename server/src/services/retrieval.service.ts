@@ -8,20 +8,28 @@ import {
   SIMILARITY_SCORE_THRESHOLD,
   SUMMARY_CHUNK_LIMIT,
   SUMMARY_SCROLL_LIMIT,
+  QDRANT_COLLECTION,
 } from "../config/rag.constants";
 import { ComprehensiveContent, DocumentResult } from "../types/pdf.types";
 
 type UserId = Types.ObjectId | string;
 
 async function getOriginalFilename(
-  collection: string,
+  pdfId: string,
   userId: UserId
 ): Promise<string> {
   const pdfMetadata = await PDFMetadata.findOne({
-    collectionName: collection,
+    collectionName: pdfId,
     userId,
   });
-  return pdfMetadata?.originalFilename ?? collection;
+  return pdfMetadata?.originalFilename ?? pdfId;
+}
+
+function collectionExists(): Promise<boolean> {
+  return qdrantClient
+    .getCollections()
+    .then((res) => res.collections.some((c) => c.name === QDRANT_COLLECTION))
+    .catch(() => false);
 }
 
 export async function getComprehensiveContent(
@@ -29,107 +37,55 @@ export async function getComprehensiveContent(
   userId: UserId
 ): Promise<ComprehensiveContent[]> {
   const allContent: ComprehensiveContent[] = [];
-  const embeddings = createEmbeddings();
+
+  if (!(await collectionExists())) return allContent;
 
   console.log(
-    `Attempting to get content from ${collectionsToSearch.length} collections`
+    `Attempting to get content from ${collectionsToSearch.length} PDF(s)`
   );
 
-  for (const collection of collectionsToSearch) {
+  for (const pdfId of collectionsToSearch) {
     try {
-      console.log(`Getting comprehensive content from collection: ${collection}`);
+      const originalFilename = await getOriginalFilename(pdfId, userId);
 
-      let collectionInfo;
-      try {
-        collectionInfo = await qdrantClient.getCollection(collection);
-        console.log(
-          `Collection ${collection} exists with ${collectionInfo.points_count} points`
-        );
+      const scrollResponse = await qdrantClient.scroll(QDRANT_COLLECTION, {
+        limit: SUMMARY_SCROLL_LIMIT,
+        with_payload: true,
+        with_vector: false,
+        filter: {
+          must: [{ key: "metadata.pdfId", match: { value: pdfId } }],
+        },
+      });
 
-        if (collectionInfo.points_count === 0) {
-          console.log(`Collection ${collection} is empty, skipping`);
-          continue;
-        }
-      } catch (collectionError) {
-        console.error(`Collection ${collection} doesn't exist:`, collectionError);
-        continue;
-      }
+      console.log(
+        `Retrieved ${scrollResponse.points.length} points for pdfId: ${pdfId}`
+      );
 
-      const originalFilename = await getOriginalFilename(collection, userId);
-
-      try {
-        const scrollResponse = await qdrantClient.scroll(collection, {
-          limit: SUMMARY_SCROLL_LIMIT,
-          with_payload: true,
-          with_vector: false,
-        });
-
-        console.log(
-          `Retrieved ${scrollResponse.points.length} points from ${collection}`
-        );
-
-        if (scrollResponse.points.length > 0) {
-          const contentChunks = scrollResponse.points
-            .map((point) => {
-              const payload = point.payload as Record<string, string> | undefined;
-              return payload?.pageContent || payload?.content || "";
-            })
-            .filter((content) => content && content.trim().length > 20)
-            .slice(0, SUMMARY_CHUNK_LIMIT);
-
-          if (contentChunks.length > 0) {
-            allContent.push({
-              filename: originalFilename,
-              collectionName: collection,
-              content: contentChunks.join("\n\n"),
-              chunkCount: contentChunks.length,
-              totalChunks: scrollResponse.points.length,
-            });
-            continue;
-          }
-        }
-      } catch (scrollError) {
-        console.error(`Error during scroll for collection ${collection}:`, scrollError);
-      }
-
-      // Fallback: similarity search with a generic query
-      try {
-        const vectorStore = await QdrantVectorStore.fromExistingCollection(
-          embeddings,
-          {
-            url: process.env.QDRANT_URL,
-            apiKey: process.env.QDRANT_API_KEY,
-            collectionName: collection,
-          }
-        );
-
-        const fallbackResults = await vectorStore.similaritySearch(
-          "content document text",
-          5
-        );
-
-        const contentChunks = fallbackResults
-          .map((doc) => doc.pageContent)
-          .filter((content) => content && content.trim().length > 20);
+      if (scrollResponse.points.length > 0) {
+        const contentChunks = scrollResponse.points
+          .map((point) => {
+            const payload = point.payload as Record<string, string> | undefined;
+            return payload?.pageContent || payload?.content || "";
+          })
+          .filter((content) => content && content.trim().length > 20)
+          .slice(0, SUMMARY_CHUNK_LIMIT);
 
         if (contentChunks.length > 0) {
           allContent.push({
             filename: originalFilename,
-            collectionName: collection,
+            collectionName: pdfId,
             content: contentChunks.join("\n\n"),
             chunkCount: contentChunks.length,
-            totalChunks: fallbackResults.length,
+            totalChunks: scrollResponse.points.length,
           });
         }
-      } catch (fallbackError) {
-        console.error(`Fallback also failed for ${collection}:`, fallbackError);
       }
     } catch (error) {
-      console.error(`Error processing collection ${collection}:`, error);
+      console.error(`Error getting content for pdfId ${pdfId}:`, error);
     }
   }
 
-  console.log(`Total content retrieved from ${allContent.length} collections`);
+  console.log(`Total content retrieved from ${allContent.length} PDF(s)`);
   return allContent;
 }
 
@@ -138,51 +94,68 @@ export async function similaritySearchAcrossCollections(
   collectionsToSearch: string[],
   userId: UserId
 ): Promise<DocumentResult[]> {
+  if (!(await collectionExists())) return [];
+
   const embeddings = createEmbeddings();
-  const allRelevantDocs: DocumentResult[] = [];
 
-  for (const collection of collectionsToSearch) {
-    try {
-      const vectorStore = await QdrantVectorStore.fromExistingCollection(
-        embeddings,
-        {
-          url: process.env.QDRANT_URL,
-          apiKey: process.env.QDRANT_API_KEY,
-          collectionName: collection,
-        }
-      );
-
-      const docsWithScores = await vectorStore.similaritySearchWithScore(
-        userQuery,
-        SIMILARITY_TOP_K
-      );
-
-      const relevantDocs = docsWithScores.filter(
-        ([, score]) => score >= SIMILARITY_SCORE_THRESHOLD
-      );
-
-      if (relevantDocs.length > 0) {
-        const originalFilename = await getOriginalFilename(collection, userId);
-
-        for (const [doc] of relevantDocs) {
-          allRelevantDocs.push({
-            pageContent: doc.pageContent,
-            metadata: {
-              ...doc.metadata,
-              collectionName: collection,
-              originalFilename,
-            },
-          });
-        }
-      }
-    } catch (error) {
-      console.error(`Error searching in collection ${collection}:`, error);
+  const vectorStore = await QdrantVectorStore.fromExistingCollection(
+    embeddings,
+    {
+      url: process.env.QDRANT_URL,
+      apiKey: process.env.QDRANT_API_KEY,
+      collectionName: QDRANT_COLLECTION,
     }
-  }
+  );
 
-  return allRelevantDocs;
+  const filter = {
+    should: collectionsToSearch.map((pdfId) => ({
+      key: "metadata.pdfId",
+      match: { value: pdfId },
+    })),
+  };
+
+  try {
+    const docsWithScores = await vectorStore.similaritySearchWithScore(
+      userQuery,
+      SIMILARITY_TOP_K,
+      filter
+    );
+
+    const relevantDocs = docsWithScores.filter(
+      ([, score]) => score >= SIMILARITY_SCORE_THRESHOLD
+    );
+
+    const allRelevantDocs: DocumentResult[] = [];
+
+    const filenameCache = new Map<string, string>();
+
+    for (const [doc] of relevantDocs) {
+      const pdfId = doc.metadata?.pdfId as string;
+      if (!filenameCache.has(pdfId)) {
+        filenameCache.set(pdfId, await getOriginalFilename(pdfId, userId));
+      }
+
+      allRelevantDocs.push({
+        pageContent: doc.pageContent,
+        metadata: {
+          ...doc.metadata,
+          collectionName: pdfId,
+          originalFilename: filenameCache.get(pdfId),
+        },
+      });
+    }
+
+    return allRelevantDocs;
+  } catch (error) {
+    console.error("Error searching across PDFs:", error);
+    return [];
+  }
 }
 
-export async function deleteQdrantCollection(collectionName: string): Promise<void> {
-  await qdrantClient.deleteCollection(collectionName);
+export async function deleteQdrantPoints(pdfId: string): Promise<void> {
+  await qdrantClient.delete(QDRANT_COLLECTION, {
+    filter: {
+      must: [{ key: "metadata.pdfId", match: { value: pdfId } }],
+    },
+  });
 }

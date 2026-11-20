@@ -11,16 +11,50 @@ import {
   CHUNK_OVERLAP,
   EMBEDDING_BATCH_SIZE,
   VECTOR_SIZE,
+  QDRANT_COLLECTION,
 } from "../config/rag.constants";
 import { PdfIngestionResult, PdfUploadJobData } from "../types/job.types";
 import { waitForStableFile } from "../utils/fileVerification";
 
-function buildCollectionName(filePath: string): string {
+function buildPdfId(filePath: string): string {
   const parsedPath = path.parse(filePath);
   const baseFilename = parsedPath.name;
   return `pdf_${Date.now()}_${baseFilename
     .replace(/[^a-zA-Z0-9]/g, "_")
     .substring(0, 40)}`;
+}
+
+let collectionReady = false;
+
+async function ensureCollection(): Promise<void> {
+  if (collectionReady) return;
+
+  const collections = await qdrantClient.getCollections();
+  const exists = collections.collections.some(
+    (c) => c.name === QDRANT_COLLECTION
+  );
+
+  if (!exists) {
+    await qdrantClient.createCollection(QDRANT_COLLECTION, {
+      vectors: { size: VECTOR_SIZE, distance: "Cosine" },
+    });
+
+    await qdrantClient.createPayloadIndex(QDRANT_COLLECTION, {
+      field_name: "metadata.pdfId",
+      field_schema: "keyword",
+    });
+
+    await qdrantClient.createPayloadIndex(QDRANT_COLLECTION, {
+      field_name: "metadata.userId",
+      field_schema: "keyword",
+    });
+
+    console.log(
+      `Created global collection "${QDRANT_COLLECTION}" with payload indexes`
+    );
+  }
+
+  collectionReady = true;
 }
 
 export async function ingestPdf(
@@ -30,8 +64,8 @@ export async function ingestPdf(
 
   await waitForStableFile(data.path);
 
-  const collectionName = buildCollectionName(data.path);
-  console.log(`Creating new collection: ${collectionName}`);
+  const collectionName = buildPdfId(data.path);
+  console.log(`PDF ID: ${collectionName}`);
 
   let docs;
   try {
@@ -59,29 +93,24 @@ export async function ingestPdf(
     throw new Error("No chunks created from PDF content");
   }
 
-  const embeddings = createEmbeddings();
-
-  const collections = await qdrantClient.getCollections();
-  const collectionExists = collections.collections.some(
-    (collection) => collection.name === collectionName
-  );
-
-  if (!collectionExists) {
-    await qdrantClient.createCollection(collectionName, {
-      vectors: {
-        size: VECTOR_SIZE,
-        distance: "Cosine",
-      },
-    });
-    console.log(`Created new collection: ${collectionName}`);
+  for (const doc of splitDocs) {
+    doc.metadata = {
+      ...doc.metadata,
+      pdfId: collectionName,
+      userId: data.userId,
+    };
   }
+
+  await ensureCollection();
+
+  const embeddings = createEmbeddings();
 
   const vectorStore = await QdrantVectorStore.fromExistingCollection(
     embeddings,
     {
       url: process.env.QDRANT_URL,
       apiKey: process.env.QDRANT_API_KEY,
-      collectionName,
+      collectionName: QDRANT_COLLECTION,
     }
   );
 
@@ -94,7 +123,7 @@ export async function ingestPdf(
   }
 
   console.log(
-    `Successfully added ${splitDocs.length} chunks to collection: ${collectionName}`
+    `Successfully added ${splitDocs.length} chunks to "${QDRANT_COLLECTION}" with pdfId: ${collectionName}`
   );
 
   const pdfMetadata = new PDFMetadata({
@@ -106,10 +135,8 @@ export async function ingestPdf(
     filePath: data.path,
   });
   await pdfMetadata.save();
-  console.log(`Successfully saved PDF metadata to MongoDB: ${collectionName}`);
+  console.log(`Saved PDF metadata to MongoDB: ${collectionName}`);
 
-  // The raw PDF file is no longer needed — all data lives in Qdrant and MongoDB.
-  // Delete it immediately to avoid accumulating dead files on disk.
   try {
     if (fs.existsSync(data.path)) {
       fs.unlinkSync(data.path);

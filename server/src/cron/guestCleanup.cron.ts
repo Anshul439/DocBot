@@ -2,7 +2,7 @@ import cron from "node-cron";
 import PDFMetadata from "../models/pdf.model";
 import ChatMessage from "../models/chat.model";
 import { qdrantClient } from "../config/qdrant";
-import { GUEST_TTL_HOURS } from "../config/rag.constants";
+import { GUEST_TTL_HOURS, QDRANT_COLLECTION } from "../config/rag.constants";
 
 export function scheduleGuestCleanup(): void {
   cron.schedule("0 3 * * *", async () => {
@@ -15,9 +15,15 @@ export function scheduleGuestCleanup(): void {
 
       for (const pdf of expiredGuestPdfs) {
         try {
-          await qdrantClient.deleteCollection(pdf.collectionName);
+          await qdrantClient.delete(QDRANT_COLLECTION, {
+            filter: {
+              must: [
+                { key: "metadata.pdfId", match: { value: pdf.collectionName } },
+              ],
+            },
+          });
         } catch {
-          // collection may already be gone
+          // points may already be gone
         }
 
         await PDFMetadata.deleteOne({ _id: pdf._id });
